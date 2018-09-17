@@ -20,22 +20,67 @@
 #include <iterator>
 #include <type_traits>
 
-#include "assert.h"
-#include "list_common.h"
+#include <bds/assert.h>
+#include <bds/listfwd.h>
 
 namespace bds {
 
+template <typename T>
 struct tailq_entry {
-  std::uintptr_t next;
-  std::uintptr_t prev;
+  entry_ref_union<tailq_entry, T> next;
+  entry_ref_union<tailq_entry, T> prev;
 };
 
-inline tailq_entry &make_sentinel_entry(tailq_entry *e) noexcept {
-  e->next = e->prev = reinterpret_cast<std::uintptr_t>(e);
-  return *e;
-}
+template <typename T, typename EntryAccess>
+struct tailq_entry_ref_traits {
+  using entry_ref_type = invocable_tagged_ref<tailq_entry<T>, T>;
+  constexpr static auto EntryRefMember =
+      &entry_ref_union<tailq_entry<T>, T>::invocableTagged;
+};
 
-template <typename T, typename EntryAccess, typename Derived>
+template <typename T, std::size_t Offset>
+struct tailq_entry_ref_traits<T, offset_extractor<tailq_entry<T>, Offset>> {
+  using entry_ref_type = offset_entry_ref<tailq_entry<T>>;
+  constexpr static auto EntryRefMember =
+      &entry_ref_union<tailq_entry<T>, T>::offset;
+};
+
+template <typename T, typename EntryAccess, CompressedSize SizeMember,
+          typename Derived>
+    requires TailQEntryAccessor<EntryAccess, T>
+class tailq_base;
+
+template <typename T, CompressedSize SizeMember>
+class tailq_fwd_head {
+public:
+  using value_type = T;
+  using size_type = std::conditional_t<std::is_same_v<SizeMember, no_size>,
+                                       std::size_t, SizeMember>;
+
+  tailq_fwd_head() noexcept : m_sz{} {
+    m_endEntry.next.offset = m_endEntry.prev.offset = &m_endEntry;
+  }
+
+  tailq_fwd_head(const tailq_fwd_head &) = delete;
+
+  tailq_fwd_head(tailq_fwd_head &&) = delete;
+
+  ~tailq_fwd_head() = default;
+
+  tailq_fwd_head &operator=(const tailq_fwd_head &) = delete;
+
+  tailq_fwd_head &operator=(tailq_fwd_head &&) = delete;
+
+private:
+  template <typename, typename, typename, typename>
+  friend class tailq_base;
+
+  tailq_entry<T> m_endEntry;
+  [[no_unique_address]] SizeMember m_sz;
+};
+
+template <typename T, typename EntryAccess, CompressedSize SizeMember,
+          typename Derived>
     requires TailQEntryAccessor<EntryAccess, T>
 class tailq_base {
 public:
@@ -44,12 +89,14 @@ public:
   using const_reference = const T &;
   using pointer = T *;
   using const_pointer = const T *;
-  using entry_type = tailq_entry;
+  using size_type = tailq_fwd_head<T, SizeMember>::size_type;
+  using difference_type = std::make_signed_t<size_type>;
+  using entry_type = tailq_entry<T>;
   using entry_access_type = EntryAccess;
-  using derived_type = Derived;
+  using size_member_type = SizeMember;
 
-  template <typename D>
-  using other_list_t = tailq_base<T, EntryAccess, D>;
+  template <CompressedSize S, typename D>
+  using other_list_t = tailq_base<T, EntryAccess, S, D>;
 
   tailq_base() requires std::is_default_constructible_v<EntryAccess> = default;
 
@@ -58,40 +105,33 @@ public:
   tailq_base(tailq_base &&other)
       requires std::is_move_constructible_v<EntryAccess> = default;
 
-  template <typename D>
-  tailq_base(other_list_t<D> &&other)
+  template <CompressedSize S, typename D>
+  tailq_base(other_list_t<S, D> &&other)
       noexcept(std::is_nothrow_move_constructible_v<EntryAccess>)
-      : entryAccessor{std::move(other.entryAccessor)} {}
+      : m_entryAccessor{std::move(other.m_entryAccessor)} {}
 
   template <typename... Ts>
       requires std::is_constructible_v<EntryAccess, Ts...>
-  explicit tailq_base(Ts &&... vs)
+  explicit tailq_base(Ts &&...vs)
       noexcept(std::is_nothrow_constructible_v<EntryAccess, Ts...>)
-      : entryAccessor{std::forward<Ts>(vs)...} {}
+      : m_entryAccessor{std::forward<Ts>(vs)...} {}
 
-  ~tailq_base() noexcept { clear(); }
+  ~tailq_base() = default;
 
   tailq_base &operator=(const tailq_base &) = delete;
 
-  template <typename D>
-  tailq_base &operator=(other_list_t<D> &&other)
+  template <CompressedSize S, typename D>
+  tailq_base &operator=(other_list_t<S, D> &&other)
       noexcept(std::is_nothrow_move_assignable_v<EntryAccess>)
       requires std::is_move_assignable_v<EntryAccess> {
-    clear();
-    swap_lists(other);
-    entryAccessor = std::move(other.entryAccessor);
+    m_entryAccessor = std::move(other.m_entryAccessor);
     return *this;
   }
 
-  tailq_base &operator=(std::initializer_list<T *> ilist) noexcept {
-    assign(ilist);
-    return *this;
-  }
-
-  entry_access_type &get_entry_accessor() noexcept { return entryAccessor; }
+  entry_access_type &get_entry_accessor() noexcept { return m_entryAccessor; }
 
   const entry_access_type &get_entry_accessor() const noexcept {
-    return entryAccessor;
+    return m_entryAccessor;
   }
 
   template <typename InputIt>
@@ -115,26 +155,28 @@ public:
   class iterator;
   class const_iterator;
 
-  using iterator_t = type_identity_t<iterator>;
-  using const_iterator_t = type_identity_t<const_iterator>;
+  using iterator_t = std::type_identity_t<iterator>;
+  using const_iterator_t = std::type_identity_t<const_iterator>;
 
   using reverse_iterator = std::reverse_iterator<iterator>;
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
-  iterator begin() noexcept { return {getEndEntry()->next, entryAccessor}; }
+  iterator begin() noexcept {
+    return {getTailQData().m_endEntry.next.*EntryRefMember, m_entryAccessor};
+  }
 
   const_iterator begin() const noexcept {
-    return {getEndEntry()->next, entryAccessor};
+    return {getTailQData().m_endEntry.next.*EntryRefMember, m_entryAccessor};
   }
 
   const_iterator cbegin() const noexcept { return begin(); }
 
   iterator end() noexcept {
-    return {(std::uintptr_t)getEndEntry(), entryAccessor};
+    return {entry_ref_type{&getTailQData().m_endEntry}, m_entryAccessor};
   }
 
   const_iterator end() const noexcept {
-    return {(std::uintptr_t)getEndEntry(), entryAccessor};
+    return const_cast<tailq_base *>(this)->end();
   }
 
   const_iterator cend() const noexcept { return end(); }
@@ -155,19 +197,19 @@ public:
 
   const_reverse_iterator crend() const noexcept { return rend(); }
 
-  iterator iter(T *t) noexcept { return {t, entryAccessor}; }
-  const_iterator iter(const T *t) noexcept { return {t, entryAccessor}; }
-  const_iterator citer(const T *t) noexcept { return {t, entryAccessor}; }
+  iterator iter(T *t) noexcept { return {t, m_entryAccessor}; }
+  const_iterator iter(const T *t) noexcept { return {t, m_entryAccessor}; }
+  const_iterator citer(const T *t) noexcept { return {t, m_entryAccessor}; }
 
   [[nodiscard]] bool empty() const noexcept {
-    const tailq_entry *endEntry = getEndEntry();
-    return getEntry(endEntry->next) == endEntry;
+    const entry_type &endEntry = getTailQData().m_endEntry;
+    return getEntry(endEntry.next) == &endEntry;
   }
 
-  auto size() const noexcept;
+  size_type size() const noexcept;
 
-  constexpr auto max_size() {
-    return std::numeric_limits<typename Derived::size_type>::max();
+  constexpr size_type max_size() {
+    return std::numeric_limits<size_type>::max();
   }
 
   void clear() noexcept;
@@ -206,69 +248,71 @@ public:
 
   void pop_front() noexcept { erase(begin()); }
 
-  template <typename D2>
-  void swap(other_list_t<D2> &other)
+  template <CompressedSize S2, typename D2>
+  void swap(other_list_t<S2, D2> &other)
       noexcept(std::is_nothrow_swappable_v<EntryAccess>) {
-    std::swap(entryAccessor, other.entryAccessor);
+    std::swap(m_entryAccessor, other.m_entryAccessor);
     swap_lists(other);
   }
 
-  template <typename D2>
-  void merge(other_list_t<D2> &other) noexcept {
+  template <CompressedSize S2, typename D2>
+  void merge(other_list_t<S2, D2> &other) noexcept {
     return merge(other, std::less<T>{});
   }
 
-  template <typename D2>
-  void merge(other_list_t<D2> &&other) noexcept {
+  template <CompressedSize S2, typename D2>
+  void merge(other_list_t<S2, D2> &&other) noexcept {
     return merge(std::move(other), std::less<T>{});
   }
 
-  template <typename D2, typename Compare>
-  void merge(other_list_t<D2> &other, Compare comp) noexcept;
+  template <CompressedSize S2, typename D2, typename Compare>
+  void merge(other_list_t<S2, D2> &other, Compare comp) noexcept;
 
-  template <typename D2, typename Compare>
-  void merge(other_list_t<D2> &&other, Compare comp) noexcept {
+  template <CompressedSize S2, typename D2, typename Compare>
+  void merge(other_list_t<S2, D2> &&other, Compare comp) noexcept {
     merge(other, comp);
   }
 
-  template <typename D2>
-  void splice(const_iterator pos, other_list_t<D2> &other) noexcept;
+  template <CompressedSize S2, typename D2>
+  void splice(const_iterator pos, other_list_t<S2, D2> &other) noexcept;
 
-  template <typename D2>
-  void splice(const_iterator_t pos, other_list_t<D2> &&other) noexcept {
+  template <CompressedSize S2, typename D2>
+  void splice(const_iterator_t pos, other_list_t<S2, D2> &&other) noexcept {
     return splice(pos, other);
   }
 
-  template <typename D2>
-  void splice(const_iterator_t pos, other_list_t<D2> &other,
-              typename other_list_t<D2>::const_iterator it) noexcept {
+  template <CompressedSize S2, typename D2>
+  void splice(const_iterator_t pos, other_list_t<S2, D2> &other,
+              other_list_t<S2, D2>::const_iterator it) noexcept {
     return splice(pos, other, it, other.cend());
   }
 
-  template <typename D2>
-  void splice(const_iterator_t pos, other_list_t<D2> &&other,
-              typename other_list_t<D2>::const_iterator it) noexcept {
+  template <CompressedSize S2, typename D2>
+  void splice(const_iterator_t pos, other_list_t<S2, D2> &&other,
+              other_list_t<S2, D2>::const_iterator it) noexcept {
     return splice(pos, other, it);
   }
 
-  template <typename D2>
-  void splice(const_iterator pos, other_list_t<D2> &other,
-              typename other_list_t<D2>::const_iterator first,
-              typename other_list_t<D2>::const_iterator last) noexcept;
+  template <CompressedSize S2, typename D2>
+  void splice(const_iterator pos, other_list_t<S2, D2> &other,
+              other_list_t<S2, D2>::const_iterator first,
+              other_list_t<S2, D2>::const_iterator last) noexcept;
 
-  template <typename D2>
-  void splice(const_iterator_t pos, other_list_t<D2> &&other,
-              typename other_list_t<D2>::const_iterator first,
-              typename other_list_t<D2>::const_iterator last) noexcept {
+  template <CompressedSize S2, typename D2>
+  void splice(const_iterator_t pos, other_list_t<S2, D2> &&other,
+              other_list_t<S2, D2>::const_iterator first,
+              other_list_t<S2, D2>::const_iterator last) noexcept {
     return splice(pos, other, first, last);
   }
 
   // FIXME [C++2a] we badly need noexcept(auto) everywhere, if it ever
   // becomes standardized
-  void remove(const T &value) noexcept { remove_if(std::equal_to<T>{}); }
+  size_type remove(const T &value) noexcept {
+    return remove_if(std::equal_to<T>{});
+  }
 
   template <typename UnaryPredicate>
-  void remove_if(UnaryPredicate) noexcept;
+  size_type remove_if(UnaryPredicate) noexcept;
 
   void reverse() noexcept;
 
@@ -283,38 +327,43 @@ public:
   void sort(Compare) noexcept;
 
 protected:
-  template <typename D2>
-  void swap_lists(other_list_t<D2> &other) noexcept;
+  template <CompressedSize S2, typename D2>
+  void swap_lists(other_list_t<S2, D2> &other) noexcept;
 
 private:
-  template <typename, typename, typename>
+  template <typename, typename, typename, typename>
   friend class tailq_base;
 
-  using tailq_link_encoder = link_encoder<tailq_entry, EntryAccess, T>;
+  constexpr static bool HasInlineSize = !std::is_same_v<SizeMember, no_size>;
 
-  tailq_entry *getEndEntry() noexcept {
-    return static_cast<Derived *>(this)->getEndEntry();
+  constexpr static auto EntryRefMember =
+      tailq_entry_ref_traits<T, EntryAccess>::EntryRefMember;
+
+  using entry_ref_type = tailq_entry_ref_traits<T, EntryAccess>::entry_ref_type;
+  using entry_ref_codec = detail::entry_ref_codec<entry_ref_type, EntryAccess>;
+
+  tailq_fwd_head<T, SizeMember> &getTailQData() noexcept {
+    return static_cast<Derived *>(this)->getTailQData();
   }
 
-  const tailq_entry *getEndEntry() const noexcept {
-    return const_cast<tailq_base *>(this)->getEndEntry();
+  const tailq_fwd_head<T, SizeMember> &getTailQData() const noexcept {
+    return static_cast<const Derived *>(this)->getTailQData();
   }
 
-  auto &getSizeRef() noexcept {
-    return static_cast<Derived *>(this)->getSizeRef();
+  entry_type *getEntry(entry_ref_type ref) const noexcept {
+    return entry_ref_codec::get_entry(m_entryAccessor, ref);
   }
 
-  template <typename U>
-  tailq_entry *getEntry(U u) const noexcept {
-    compressed_invocable_ref<EntryAccess, T &> fn{entryAccessor};
-    return tailq_link_encoder::getEntry(fn, u);
+  entry_type *getEntry(entry_ref_union<entry_type, T> ref) const noexcept {
+    return getEntry(ref.*EntryRefMember);
   }
 
-  template <typename It>
-      requires std::is_same_v<It, iterator_t> ||
-               std::is_same_v<It, const_iterator_t>
-  static tailq_entry *getEntry(It i) noexcept {
-    return tailq_link_encoder::getEntry(i.rEntryAccessor, i.current);
+  static entry_type *getEntry(iterator_t i) noexcept {
+    return entry_ref_codec::get_entry(i.m_rEntryAccessor, i.m_current);
+  }
+
+  static entry_type *getEntry(const_iterator_t i) noexcept {
+    return entry_ref_codec::get_entry(i.m_rEntryAccessor, i.m_current);
   }
 
   template <typename QueueIt>
@@ -328,29 +377,30 @@ private:
   const_iterator merge_sort(const_iterator f1, const_iterator e2, Compare comp,
                             SizeType n) noexcept;
 
-  [[no_unique_address]] mutable EntryAccess entryAccessor;
+  [[no_unique_address]] mutable EntryAccess m_entryAccessor;
 };
 
-template <typename T, typename EntryAccess, typename Derived>
-class tailq_base<T, EntryAccess, Derived>::iterator {
+template <typename T, typename EntryAccess, typename SizeMember, typename Derived>
+class tailq_base<T, EntryAccess, SizeMember, Derived>::iterator {
 public:
-  using container = tailq_base<T, EntryAccess, Derived>;
-  using value_type = container::value_type;
-  using reference = container::reference;
-  using pointer = container::pointer;
-  using difference_type = typename Derived::difference_type;
+  using value_type = tailq_base::value_type;
+  using reference = tailq_base::reference;
+  using pointer = tailq_base::pointer;
+  using difference_type = tailq_base::difference_type;
   using iterator_category = std::bidirectional_iterator_tag;
   using invocable_ref = compressed_invocable_ref<EntryAccess, T &>;
 
-  iterator() noexcept : current{}, rEntryAccessor{} {}
+  iterator() noexcept : m_current{}, m_rEntryAccessor{} {}
   iterator(const iterator &) = default;
   iterator(iterator &&) = default;
 
   iterator(T *t) noexcept requires Stateless<EntryAccess>
-      : current{tailq_link_encoder::encode(t)}, rEntryAccessor{} {}
+      : m_current{entry_ref_codec::create_entry_ref(t)},
+        m_rEntryAccessor{} {}
 
   iterator(T *t, EntryAccess &fn) noexcept
-      : current{tailq_link_encoder::encode(t)}, rEntryAccessor{fn} {}
+      : m_current{entry_ref_codec::create_entry_ref(t)},
+        m_rEntryAccessor{fn} {}
 
   ~iterator() = default;
 
@@ -361,11 +411,11 @@ public:
   reference operator*() const noexcept { return *operator->(); }
 
   pointer operator->() const noexcept {
-    return tailq_link_encoder::getValue(this->current);
+    return entry_ref_codec::get_value(this->m_current);
   }
 
   iterator &operator++() noexcept {
-    current = container::getEntry(*this)->next;
+    m_current = getCurrentEntry()->next.*EntryRefMember;
     return *this;
   }
 
@@ -376,7 +426,7 @@ public:
   }
 
   iterator operator--() noexcept {
-    current = container::getEntry(*this)->prev;
+    m_current = getCurrentEntry()->prev.*EntryRefMember;
     return *this;
   }
 
@@ -387,56 +437,63 @@ public:
   }
 
   bool operator==(const iterator &rhs) const noexcept {
-    return current == rhs.current;
+    return m_current == rhs.m_current;
   }
 
   bool operator==(const const_iterator &rhs) const noexcept {
-    return current == rhs.current;
+    return m_current == rhs.m_current;
   }
 
   bool operator!=(const iterator &rhs) const noexcept {
-    return current != rhs.current;
+    return !operator==(rhs);
   }
 
   bool operator!=(const const_iterator &rhs) const noexcept {
-    return current != rhs.current;
+    return !operator==(rhs);
   }
 
 private:
-  template <typename, typename, typename>
+  template <typename, typename, typename, typename>
   friend class tailq_base;
 
-  friend container::const_iterator;
+  friend tailq_base::const_iterator;
 
-  iterator(std::uintptr_t e, EntryAccess &fn) noexcept
-      : current{e}, rEntryAccessor{fn} {}
+  using container = tailq_base;
 
-  std::uintptr_t current;
-  [[no_unique_address]] invocable_ref rEntryAccessor;
+  const entry_type *getCurrentEntry() const noexcept {
+    return tailq_base::getEntry(*this);
+  }
+
+  iterator(typename tailq_base::entry_ref_type ref, EntryAccess &fn) noexcept
+      : m_current{ref}, m_rEntryAccessor{fn} {}
+
+  tailq_base::entry_ref_type m_current;
+  [[no_unique_address]] invocable_ref m_rEntryAccessor;
 };
 
-template <typename T, typename EntryAccess, typename Derived>
-class tailq_base<T, EntryAccess, Derived>::const_iterator {
+template <typename T, typename EntryAccess, typename SizeMember, typename Derived>
+class tailq_base<T, EntryAccess, SizeMember, Derived>::const_iterator {
 public:
-  using container = tailq_base<T, EntryAccess, Derived>;
-  using value_type = container::value_type;
-  using reference = container::const_reference;
-  using pointer = container::const_pointer;
-  using difference_type = typename Derived::difference_type;
+  using value_type = tailq_base::value_type;
+  using reference = tailq_base::const_reference;
+  using pointer = tailq_base::const_pointer;
+  using difference_type = tailq_base::difference_type;
   using iterator_category = std::bidirectional_iterator_tag;
   using invocable_ref = compressed_invocable_ref<EntryAccess, T &>;
 
-  const_iterator() noexcept : current{}, rEntryAccessor{} {}
+  const_iterator() noexcept : m_current{}, m_rEntryAccessor{} {}
   const_iterator(const const_iterator &) = default;
   const_iterator(const_iterator &&) = default;
   const_iterator(const iterator &i) noexcept
-      : current{i.current}, rEntryAccessor{i.rEntryAccessor} {}
+      : m_current{i.m_current}, m_rEntryAccessor{i.m_rEntryAccessor} {}
 
   const_iterator(const T *t) noexcept requires Stateless<EntryAccess>
-      : current{tailq_link_encoder::encode(t)}, rEntryAccessor{} {}
+      : m_current{entry_ref_codec::create_entry_ref(t)},
+        m_rEntryAccessor{} {}
 
   const_iterator(const T *t, EntryAccess &fn) noexcept
-      : current{tailq_link_encoder::encode(t)}, rEntryAccessor{fn} {}
+      : m_current{entry_ref_codec::create_entry_ref(t)},
+        m_rEntryAccessor{fn} {}
 
   ~const_iterator() = default;
 
@@ -447,11 +504,11 @@ public:
   reference operator*() const noexcept { return *operator->(); }
 
   pointer operator->() const noexcept {
-    return tailq_link_encoder::getValue(this->current);
+    return entry_ref_codec::get_value(this->m_current);
   }
 
   const_iterator &operator++() noexcept {
-    current = container::getEntry(*this)->next;
+    m_current = getCurrentEntry()->next.*EntryRefMember;
     return *this;
   }
 
@@ -462,7 +519,7 @@ public:
   }
 
   const_iterator operator--() noexcept {
-    current = container::getEntry(*this)->prev;
+    m_current = getCurrentEntry()->prev.*EntryRefMember;
     return *this;
   }
 
@@ -473,183 +530,148 @@ public:
   }
 
   bool operator==(const iterator &rhs) const noexcept {
-    return current == rhs.current;
+    return m_current == rhs.m_current;
   }
 
   bool operator==(const const_iterator &rhs) const noexcept {
-    return current == rhs.current;
+    return m_current == rhs.m_current;
   }
 
   bool operator!=(const iterator &rhs) const noexcept {
-    return current != rhs.current;
+    return !operator==(rhs);
   }
 
   bool operator!=(const const_iterator &rhs) const noexcept {
-    return current != rhs.current;
+    return !operator==(rhs);
   }
 
 private:
-  template <typename, typename, typename>
+  template <typename, typename, typename, typename>
   friend class tailq_base;
 
-  friend container::iterator;
+  friend tailq_base::iterator;
 
-  const_iterator(std::uintptr_t e, EntryAccess &fn) noexcept
-      : current{e}, rEntryAccessor{fn} {}
+  using container = tailq_base;
 
-  std::uintptr_t current;
-  [[no_unique_address]] invocable_ref rEntryAccessor;
+  const entry_type *getCurrentEntry() const noexcept {
+    return tailq_base::getEntry(*this);
+  }
+
+  const_iterator(typename tailq_base::entry_ref_type ref, EntryAccess &fn) noexcept
+      : m_current{ref}, m_rEntryAccessor{fn} {}
+
+  tailq_base::entry_ref_type m_current;
+  [[no_unique_address]] invocable_ref m_rEntryAccessor;
 };
 
-template <SizeMember>
-class tailq_fwd_head;
+template <typename T, CompressedSize SizeMember, typename EntryAccess>
+    requires TailQEntryAccessor<entry_access_helper_t<T, EntryAccess>, T>
+class tailq_proxy<tailq_fwd_head<T, SizeMember>, EntryAccess>
+    : public tailq_base<T, entry_access_helper_t<T, EntryAccess>, SizeMember,
+                        tailq_proxy<tailq_fwd_head<T, SizeMember>, EntryAccess>> {
+  using entry_access_type = entry_access_helper_t<T, EntryAccess>;
+  using base_type = tailq_base<T, entry_access_type, SizeMember, tailq_proxy>;
 
-template <typename T, typename EntryAccess, SizeMember SizeType>
-class tailq_container
-    : public tailq_base<T, EntryAccess,
-                        tailq_container<T, EntryAccess, SizeType>> {
 public:
-  using base_type =
-      tailq_base<T, EntryAccess, tailq_container<T, EntryAccess, SizeType>>;
+  using fwd_head_type = tailq_fwd_head<T, SizeMember>;
 
-  using size_type = std::conditional_t<std::is_same_v<SizeType, no_size>,
-                                       std::size_t, SizeType>;
+  template <CompressedSize S, typename D>
+  using other_list_t = tailq_base<
+      T, entry_access_type, SizeMember, tailq_proxy>::template other_list_t<S, D>;
 
-  using difference_type = std::make_signed_t<size_type>;
+  tailq_proxy() = delete;
 
-  using fwd_head_type = tailq_fwd_head<SizeType>;
+  tailq_proxy(const tailq_proxy &) = delete;
 
-  template <typename D>
-  using other_list_t = typename tailq_base<
-      T, EntryAccess,
-      tailq_container<T, EntryAccess, SizeType>>::template other_list_t<D>;
+  tailq_proxy(tailq_proxy &&) = delete;
 
-  tailq_container() = delete;
-
-  tailq_container(const tailq_container &) = delete;
-
-  tailq_container(tailq_container &&) = delete;
-
-  tailq_container(tailq_fwd_head<SizeType> &h)
-      noexcept(std::is_nothrow_default_constructible_v<EntryAccess>)
-      requires std::is_default_constructible_v<EntryAccess>
-      : base_type{}, head{h} {}
+  tailq_proxy(fwd_head_type &h)
+      noexcept(std::is_nothrow_default_constructible_v<entry_access_type>)
+      requires std::is_default_constructible_v<entry_access_type>
+      : base_type{}, m_head{h} {}
 
   template <typename... Ts>
-      requires std::is_constructible_v<EntryAccess, Ts...>
-  explicit tailq_container(tailq_fwd_head<SizeType> &h, Ts &&... vs)
-      noexcept(std::is_nothrow_constructible_v<EntryAccess, Ts...>)
-      : base_type{std::forward<Ts>(vs)...}, head{h} {}
+      requires std::is_constructible_v<entry_access_type, Ts...>
+  explicit tailq_proxy(fwd_head_type &h, Ts &&...vs)
+      noexcept(std::is_nothrow_constructible_v<entry_access_type, Ts...>)
+      : base_type{std::forward<Ts>(vs)...}, m_head{h} {}
 
-  template <typename D>
-  tailq_container(tailq_fwd_head<SizeType> &h, other_list_t<D> && other)
-      noexcept(std::is_move_constructible_v<EntryAccess>)
-      : base_type{std::move(other)}, head{h} {
+  template <CompressedSize S, typename D>
+  tailq_proxy(fwd_head_type &h, other_list_t<S, D> &&other)
+      noexcept(std::is_move_constructible_v<entry_access_type>)
+      : base_type{std::move(other)}, m_head{h} {
     this->swap_lists(other);
   }
 
   template <typename InputIt, typename... Ts>
-  tailq_container(tailq_fwd_head<SizeType> &h, InputIt first, InputIt last,
-                  Ts &&... vs)
-      noexcept(std::is_nothrow_constructible_v<EntryAccess, Ts...>)
-      : base_type{std::forward<Ts>(vs)...}, head{h} {
+  tailq_proxy(fwd_head_type &h, InputIt first, InputIt last, Ts &&...vs)
+      noexcept(std::is_nothrow_constructible_v<entry_access_type, Ts...>)
+      : base_type{std::forward<Ts>(vs)...}, m_head{h} {
     base_type::assign(first, last);
   }
 
   template <typename... Ts>
-  tailq_container(tailq_fwd_head<SizeType> &h,
-                  std::initializer_list<T *> ilist, Ts &&... vs)
-      noexcept(std::is_nothrow_constructible_v<EntryAccess, Ts...>)
-      : base_type{std::forward<Ts>(vs)...}, head{h} {
+  tailq_proxy(fwd_head_type &h, std::initializer_list<T *> ilist, Ts &&...vs)
+      noexcept(std::is_nothrow_constructible_v<entry_access_type, Ts...>)
+      : base_type{std::forward<Ts>(vs)...}, m_head{h} {
     base_type::assign(ilist);
   }
 
-  ~tailq_container() = default;
+  ~tailq_proxy() = default;
 
-  tailq_container &operator=(const tailq_container &) = delete;
+  tailq_proxy &operator=(const tailq_proxy &) = delete;
 
-  tailq_container &operator=(tailq_container &&rhs)
-      noexcept(std::is_nothrow_move_assignable_v<EntryAccess>) {
+  tailq_proxy &operator=(tailq_proxy &&rhs)
+      noexcept(std::is_nothrow_move_assignable_v<entry_access_type>) {
     base_type::operator=(std::move(rhs));
+    base_type::clear();
+    base_type::swap_lists(rhs);
     return *this;
   }
 
-  template <typename D>
-  tailq_container &operator=(other_list_t<D> &&rhs)
-      noexcept(std::is_nothrow_move_assignable_v<EntryAccess>) {
+  // FIXME: what to do with this?
+  template <CompressedSize S, typename D>
+  tailq_proxy &operator=(other_list_t<S, D> &&rhs)
+      noexcept(std::is_nothrow_move_assignable_v<entry_access_type>) {
     base_type::operator=(std::move(rhs));
+    base_type::clear();
+    base_type::swap_lists(rhs);
     return *this;
   }
 
-  tailq_container &operator=(std::initializer_list<T *> ilist) noexcept {
-    base_type::operator=(ilist);
+  tailq_proxy &operator=(std::initializer_list<T *> ilist) noexcept {
+    base_type::assign(ilist);
     return *this;
   }
 
 private:
-  template <typename, typename, typename>
+  template <typename, typename, typename, typename>
   friend class tailq_base;
 
-  constexpr static bool HasInlineSize = !std::is_same_v<SizeType, no_size>;
+  fwd_head_type &getTailQData() noexcept { return m_head; }
 
-  tailq_entry *getEndEntry() noexcept { return head.getEndEntry(); }
+  const fwd_head_type &getTailQData() const noexcept { return m_head; }
 
-  auto &getSizeRef() noexcept { return head.getSizeRef(); }
-
-  tailq_fwd_head<SizeType> &head;
+  fwd_head_type &m_head;
 };
 
-template <SizeMember SizeType>
-class tailq_fwd_head {
-public:
-  using size_type = std::conditional_t<std::is_same_v<SizeType, no_size>,
-                                       std::size_t, SizeType>;
-
-  using difference_type = std::make_signed_t<size_type>;
-
-  tailq_fwd_head() noexcept : sz{} {
-    make_sentinel_entry(std::addressof(endEntry));
-  }
-
-  tailq_fwd_head(const tailq_fwd_head &) = delete;
-
-  tailq_fwd_head(tailq_fwd_head &&) = delete;
-
-  ~tailq_fwd_head() = default;
-
-  tailq_fwd_head &operator=(const tailq_fwd_head &) = delete;
-
-  tailq_fwd_head &operator=(tailq_fwd_head &&) = delete;
-
-protected:
-  template <typename, typename, typename>
-  friend class tailq_base;
-
-  template <typename, typename, typename>
-  friend class tailq_container;
-
-  constexpr static bool HasInlineSize = !std::is_same_v<SizeType, no_size>;
-
-  tailq_entry *getEndEntry() noexcept { return &endEntry; }
-
-  auto &getSizeRef() noexcept { return sz; }
-
-  tailq_entry endEntry;
-  [[no_unique_address]] SizeType sz;
-};
-
-template <typename T, typename EntryAccess, SizeMember SizeType>
+template <typename T, typename EntryAccess, CompressedSize SizeMember>
+    requires TailQEntryAccessor<entry_access_helper_t<T, EntryAccess>, T>
 class tailq_head
-    : public tailq_base<T, EntryAccess, tailq_head<T, EntryAccess, SizeType>>,
-      public tailq_fwd_head<SizeType> {
-public:
-  using base_type =
-      tailq_base<T, EntryAccess, tailq_head<T, EntryAccess, SizeType>>;
+    : private tailq_fwd_head<T, SizeMember>,
+      public tailq_base<T, entry_access_helper_t<T, EntryAccess>, SizeMember,
+                        tailq_head<T, EntryAccess, SizeMember>> {
+  using fwd_head_type = tailq_fwd_head<T, SizeMember>;
+  using entry_access_type = entry_access_helper_t<T, EntryAccess>;
+  using base_type = tailq_base<T, entry_access_type, SizeMember, tailq_head>;
 
-  template <typename D>
-  using other_list_t = typename tailq_base<
-      T, EntryAccess,
-      tailq_head<T, EntryAccess, SizeType>>::template other_list_t<D>;
+public:
+  using fwd_head_type::value_type;
+  using fwd_head_type::size_type;
+
+  template <CompressedSize S, typename D>
+  using other_list_t = tailq_base<
+      T, entry_access_type, SizeMember, tailq_head>::template other_list_t<S, D>;
 
   tailq_head() = default;
 
@@ -661,29 +683,29 @@ public:
     this->swap_lists(other);
   }
 
-  template <typename D>
-  tailq_head(other_list_t<D> &&other)
+  template <CompressedSize S, typename D>
+  tailq_head(other_list_t<S, D> &&other)
       noexcept(std::is_nothrow_move_constructible_v<base_type>)
       : base_type{std::move(other)} {
     this->swap_lists(other);
   }
 
   template <typename... Ts>
-      requires std::is_constructible_v<EntryAccess, Ts...>
-  explicit tailq_head(Ts &&... vs)
-      noexcept(std::is_nothrow_constructible_v<EntryAccess, Ts...>)
+      requires std::is_constructible_v<entry_access_type, Ts...>
+  explicit tailq_head(Ts &&...vs)
+      noexcept(std::is_nothrow_constructible_v<entry_access_type, Ts...>)
       : base_type{std::forward<Ts>(vs)...} {}
 
   template <typename InputIt, typename... Ts>
-  tailq_head(InputIt first, InputIt last, Ts &&... vs)
-      noexcept(std::is_nothrow_constructible_v<EntryAccess, Ts...>)
+  tailq_head(InputIt first, InputIt last, Ts &&...vs)
+      noexcept(std::is_nothrow_constructible_v<entry_access_type, Ts...>)
       : base_type{std::forward<Ts>(vs)...} {
     base_type::assign(first, last);
   }
 
   template <typename... Ts>
-  tailq_head(std::initializer_list<T *> ilist, Ts &&... vs)
-      noexcept(std::is_nothrow_constructible_v<EntryAccess, Ts...>)
+  tailq_head(std::initializer_list<T *> ilist, Ts &&...vs)
+      noexcept(std::is_nothrow_constructible_v<entry_access_type, Ts...>)
       : base_type{std::forward<Ts>(vs)...} {
     base_type::assign(ilist);
   }
@@ -695,73 +717,79 @@ public:
   tailq_head &operator=(tailq_head &&rhs)
       noexcept(std::is_nothrow_move_assignable_v<base_type>) {
     base_type::operator=(std::move(rhs));
+    base_type::clear();
+    base_type::swap_lists(rhs);
     return *this;
   }
 
-  template <typename D>
-  tailq_head &operator=(other_list_t<D> &&rhs) noexcept {
+  template <CompressedSize S, typename D>
+  tailq_head &operator=(other_list_t<S, D> &&rhs) noexcept {
     base_type::operator=(std::move(rhs));
+    base_type::clear();
+    base_type::swap_lists(rhs);
     return *this;
   }
 
   tailq_head &operator=(std::initializer_list<T *> ilist) noexcept {
-    base_type::operator=(ilist);
+    base_type::assign(ilist);
     return *this;
   }
 
 private:
-  template <typename, typename, typename>
+  template <typename, typename, typename, typename>
   friend class tailq_base;
 
-  // Pull tailq_fwd_head's getEndEntry into our scope, so that the CRTP
-  // polymorphic call in the base class will find it unambiguously.
-  using tailq_fwd_head<SizeType>::getEndEntry;
-  using tailq_fwd_head<SizeType>::getSizeRef;
+  fwd_head_type &getTailQData() noexcept { return *this; }
+
+  const fwd_head_type &getTailQData() const noexcept { return *this; }
 };
 
-template <typename T, typename E, typename D>
-auto tailq_base<T, E, D>::size() const noexcept {
-  if constexpr (D::HasInlineSize)
-    return const_cast<tailq_base *>(this)->getSizeRef();
-  else {
-    const auto s = std::distance(begin(), end());
-    return static_cast<typename D::size_type>(s);
-  }
+template <typename T, typename E, typename S, typename D>
+tailq_base<T, E, S, D>::size_type
+tailq_base<T, E, S, D>::size() const noexcept {
+  if constexpr (HasInlineSize)
+    return getTailQData().m_sz;
+  else
+    return static_cast<size_type>(std::distance(begin(), end()));
 }
 
-template <typename T, typename E, typename D>
-void tailq_base<T, E, D>::clear() noexcept {
-  make_sentinel_entry(getEndEntry());
+template <typename T, typename E, typename S, typename D>
+void tailq_base<T, E, S, D>::clear() noexcept {
+  auto &endEntry = getTailQData().m_endEntry;
+  endEntry.next.*EntryRefMember = &endEntry;
+  endEntry.prev.*EntryRefMember = &endEntry;
 
-  if constexpr (D::HasInlineSize)
-    getSizeRef() = 0;
+  if constexpr (HasInlineSize)
+    getTailQData().m_sz = 0;
 }
 
-template <typename T, typename E, typename D>
-typename tailq_base<T, E, D>::iterator
-tailq_base<T, E, D>::insert(const_iterator pos, T *value) noexcept {
-  tailq_entry *const posEntry = getEntry(pos);
-  tailq_entry *const prevEntry = getEntry(posEntry->prev);
-  tailq_entry *const insertEntry = getEntry(value);
+template <typename T, typename E, typename S, typename D>
+tailq_base<T, E, S, D>::iterator
+tailq_base<T, E, S, D>::insert(const_iterator pos, T *value) noexcept {
+  entry_type *const posEntry = getEntry(pos);
+  entry_type *const prevEntry = getEntry(posEntry->prev);
+
+  const entry_ref_type valueRef =
+      entry_ref_codec::create_entry_ref(value);
+  entry_type *const insertEntry = getEntry(valueRef);
 
   insertEntry->prev = posEntry->prev;
-  insertEntry->next = pos.current;
-  const auto encoded = prevEntry->next = posEntry->prev =
-      tailq_link_encoder::encode(value);
+  insertEntry->next = pos.m_current;
+  prevEntry->next = posEntry->prev = valueRef;
 
-  if constexpr (D::HasInlineSize)
-    ++getSizeRef();
+  if constexpr (HasInlineSize)
+    ++getTailQData().m_sz;
 
-  return {encoded, entryAccessor};
+  return {valueRef, m_entryAccessor};
 }
 
-template <typename T, typename E, typename D>
+template <typename T, typename E, typename S, typename D>
 template <typename InputIt>
-typename tailq_base<T, E, D>::iterator
-tailq_base<T, E, D>::insert(const_iterator pos, InputIt first,
-                            InputIt last) noexcept {
+tailq_base<T, E, S, D>::iterator
+tailq_base<T, E, S, D>::insert(const_iterator pos, InputIt first,
+                               InputIt last) noexcept {
   if (first == last)
-    return {pos.current, entryAccessor};
+    return {pos.m_current, m_entryAccessor};
 
   const iterator firstInsert = insert(pos, *first++);
   pos = firstInsert;
@@ -772,46 +800,43 @@ tailq_base<T, E, D>::insert(const_iterator pos, InputIt first,
   return firstInsert;
 }
 
-template <typename T, typename E, typename D>
-typename tailq_base<T, E, D>::iterator
-tailq_base<T, E, D>::erase(const_iterator pos) noexcept {
-  tailq_entry *const erasedEntry = getEntry(pos);
-  tailq_entry *const nextEntry = getEntry(erasedEntry->next);
-  tailq_entry *const prevEntry = getEntry(erasedEntry->prev);
+template <typename T, typename E, typename S, typename D>
+tailq_base<T, E, S, D>::iterator
+tailq_base<T, E, S, D>::erase(const_iterator pos) noexcept {
+  entry_type *const erasedEntry = getEntry(pos);
+  entry_type *const nextEntry = getEntry(erasedEntry->next);
+  entry_type *const prevEntry = getEntry(erasedEntry->prev);
 
-  BDS_ASSERT(erasedEntry != getEndEntry(), "end() iterator passed to erase");
+  BDS_ASSERT(erasedEntry != &getTailQData().m_endEntry,
+             "end() iterator passed to erase");
 
-  const auto encodedNext = prevEntry->next = erasedEntry->next;
+  prevEntry->next = erasedEntry->next;
   nextEntry->prev = erasedEntry->prev;
 
-  if constexpr (D::HasInlineSize)
-    --getSizeRef();
+  if constexpr (HasInlineSize)
+    --getTailQData().m_sz;
 
-  return {encodedNext, entryAccessor};
+  return {erasedEntry->next.*EntryRefMember, m_entryAccessor};
 }
 
-template <typename T, typename E, typename D>
-typename tailq_base<T, E, D>::iterator
-tailq_base<T, E, D>::erase(const_iterator first, const_iterator last) noexcept {
+template <typename T, typename E, typename S, typename D>
+tailq_base<T, E, S, D>::iterator
+tailq_base<T, E, S, D>::erase(const_iterator first, const_iterator last) noexcept {
   if (first == last)
-    return {last.current, entryAccessor};
+    return {last.m_current, m_entryAccessor};
 
   remove_range(first, std::prev(last));
 
-  if constexpr (D::HasInlineSize) {
-    typename D::size_type sz = 0;
-    while (first++ != last)
-      ++sz;
-    getSizeRef() -= sz;
-  }
+  if constexpr (HasInlineSize)
+    getTailQData().m_sz -= static_cast<size_type>(std::distance(first, last));
 
-  return {last.current, entryAccessor};
+  return {last.m_current, m_entryAccessor};
 }
 
-template <typename T, typename E, typename D1>
-template <typename D2, typename Compare>
-void tailq_base<T, E, D1>::merge(other_list_t<D2> &other,
-                                 Compare comp) noexcept {
+template <typename T, typename E, typename S1, typename D1>
+template <CompressedSize S2, typename D2, typename Compare>
+void tailq_base<T, E, S1, D1>::merge(other_list_t<S2, D2> &other,
+                                     Compare comp) noexcept {
   if (this == &other)
     return;
 
@@ -820,11 +845,11 @@ void tailq_base<T, E, D1>::merge(other_list_t<D2> &other,
   auto f2 = other.cbegin();
   auto e2 = other.cend();
 
-  if constexpr (D1::HasInlineSize)
-    getSizeRef() += std::size(other);
+  if constexpr (HasInlineSize)
+    getTailQData().m_sz += std::size(other);
 
-  if constexpr (D2::HasInlineSize)
-    other.getSizeRef() = 0;
+  if constexpr (other_list_t<S2, D2>::HasInlineSize)
+    other.getTailQData().m_sz = 0;
 
   while (f1 != e1 && f2 != e2) {
     if (comp(*f1, *f2)) {
@@ -858,43 +883,43 @@ void tailq_base<T, E, D1>::merge(other_list_t<D2> &other,
   }
 }
 
-template <typename T, typename E, typename D1>
-template <typename D2>
-void tailq_base<T, E, D1>::splice(const_iterator pos,
-                                  other_list_t<D2> &other) noexcept {
+template <typename T, typename E, typename S1, typename D1>
+template <CompressedSize S2, typename D2>
+void tailq_base<T, E, S1, D1>::splice(const_iterator pos,
+                                      other_list_t<S2, D2> &other) noexcept {
   if (other.empty())
     return;
 
   auto first = std::cbegin(other);
   auto last = --std::cend(other);
 
-  if constexpr (D1::HasInlineSize)
-    getSizeRef() += std::size(other);
+  if constexpr (HasInlineSize)
+    getTailQData().m_sz += std::size(other);
 
-  if constexpr (D2::HasInlineSize)
-    getSizeRef() = 0;
+  if constexpr (other_list_t<S2, D2>::HasInlineSize)
+    getTailQData().m_sz = 0;
 
   other.remove_range(first, last);
   insert_range(pos, first, last);
 }
 
-template <typename T, typename E, typename D1>
-template <typename D2>
-void tailq_base<T, E, D1>::splice(
-    const_iterator pos, other_list_t<D2> &other,
-    typename other_list_t<D2>::const_iterator first,
-    typename other_list_t<D2>::const_iterator last) noexcept {
+template <typename T, typename E, typename S1, typename D1>
+template <CompressedSize S2, typename D2>
+void tailq_base<T, E, S1, D1>::splice(
+    const_iterator pos, other_list_t<S2, D2> &other,
+    other_list_t<S2, D2>::const_iterator first,
+    other_list_t<S2, D2>::const_iterator last) noexcept {
   if (first == last)
     return;
 
-  if constexpr (D1::HasInlineSize || D2::HasInlineSize) {
+  if constexpr (HasInlineSize || other_list_t<S2, D2>::HasInlineSize) {
     const auto n = std::distance(first, last);
 
-    if constexpr (D1::HasInlineSize)
-      getSizeRef() += n;
+    if constexpr (HasInlineSize)
+      getTailQData().m_sz += n;
 
-    if constexpr (D2::HasInlineSize)
-      other.getSizeRef() -= n;
+    if constexpr (other_list_t<S2, D2>::HasInlineSize)
+      other.getTailQData().m_sz -= n;
   }
 
   --last;
@@ -902,9 +927,11 @@ void tailq_base<T, E, D1>::splice(
   insert_range(pos, first, last);
 }
 
-template <typename T, typename E, typename D>
+template <typename T, typename E, typename S, typename D>
 template <typename UnaryPredicate>
-void tailq_base<T, E, D>::remove_if(UnaryPredicate pred) noexcept {
+tailq_base<T, E, S, D>::size_type
+tailq_base<T, E, S, D>::remove_if(UnaryPredicate pred) noexcept {
+  size_type nRemoved = 0;
   const const_iterator e = cend();
   const_iterator i = cbegin();
 
@@ -917,20 +944,28 @@ void tailq_base<T, E, D>::remove_if(UnaryPredicate pred) noexcept {
 
     // Removing *i; it is slightly more efficient to scan for a contiguous
     // range and call range erase, than to call single-element erase one
-    // at a time.
+    // at a time. Otherwise we're patching list linkage for elements that
+    // will eventually be removed anyway.
     const_iterator scanEnd = std::next(i);
-    while (scanEnd != e && pred(*scanEnd))
+    ++nRemoved;
+
+    while (scanEnd != e && pred(*scanEnd)) {
       ++scanEnd;
+      ++nRemoved;
+    }
+
     i = erase(i, scanEnd);
     if (i != e)
       ++i; // i != e, so i == scanEnd; we know !pred(*i) already; advance i
   }
+
+  return nRemoved;
 }
 
-template <typename T, typename E, typename D>
-void tailq_base<T, E, D>::reverse() noexcept {
-  tailq_entry *const endEntry = getEndEntry();
-  tailq_entry *curEntry = endEntry;
+template <typename T, typename E, typename S, typename D>
+void tailq_base<T, E, S, D>::reverse() noexcept {
+  entry_type *const endEntry = &getTailQData().m_endEntry;
+  entry_type *curEntry = endEntry;
 
   do {
     std::swap(curEntry->next, curEntry->prev);
@@ -938,9 +973,9 @@ void tailq_base<T, E, D>::reverse() noexcept {
   } while (curEntry != endEntry);
 }
 
-template <typename T, typename E, typename D>
+template <typename T, typename E, typename S, typename D>
 template <typename BinaryPredicate>
-void tailq_base<T, E, D>::unique(BinaryPredicate pred) noexcept {
+void tailq_base<T, E, S, D>::unique(BinaryPredicate pred) noexcept {
   const const_iterator e = cend();
   const_iterator scanStart = cbegin();
 
@@ -957,18 +992,18 @@ void tailq_base<T, E, D>::unique(BinaryPredicate pred) noexcept {
   }
 }
 
-template <typename T, typename E, typename D>
+template <typename T, typename E, typename S, typename D>
 template <typename Compare>
-void tailq_base<T, E, D>::sort(Compare comp) noexcept {
+void tailq_base<T, E, S, D>::sort(Compare comp) noexcept {
   merge_sort(cbegin(), cend(), comp, std::size(*this));
 }
 
-template <typename T, typename E, typename D>
+template <typename T, typename E, typename S, typename D>
 template <typename Compare, typename SizeType>
     requires std::is_integral_v<SizeType>
-typename tailq_base<T, E, D>::const_iterator
-tailq_base<T, E, D>::merge_sort(const_iterator f1, const_iterator e2,
-                                Compare comp, SizeType n) noexcept {
+tailq_base<T, E, S, D>::const_iterator
+tailq_base<T, E, S, D>::merge_sort(const_iterator f1, const_iterator e2,
+                                   Compare comp, SizeType n) noexcept {
   // In-place merge sort; we cannot reuse our `merge` member function because
   // that merges two different tailq's, leaving the second queue empty. Here,
   // the merge operation is "in place" so the code has a different structure.
@@ -1049,62 +1084,60 @@ tailq_base<T, E, D>::merge_sort(const_iterator f1, const_iterator e2,
   return min;
 }
 
-template <typename T, typename E, typename D1>
-template <typename D2>
-void tailq_base<T, E, D1>::swap_lists(other_list_t<D2> &other) noexcept {
-  tailq_entry *const lhsEndEntry = getEndEntry();
-  tailq_entry *const lhsFirstEntry = getEntry(lhsEndEntry->next);
-  tailq_entry *const lhsLastEntry = getEntry(lhsEndEntry->prev);
+template <typename T, typename E, typename S1, typename D1>
+template <CompressedSize S2, typename D2>
+void tailq_base<T, E, S1, D1>::swap_lists(other_list_t<S2, D2> &other) noexcept {
+  entry_type *const lhsEndEntry = &getTailQData().m_endEntry;
+  entry_type *const lhsFirstEntry = getEntry(lhsEndEntry->next);
+  entry_type *const lhsLastEntry = getEntry(lhsEndEntry->prev);
 
-  tailq_entry *const rhsEndEntry = other.getEndEntry();
-  tailq_entry *const rhsFirstEntry = other.getEntry(rhsEndEntry->next);
-  tailq_entry *const rhsLastEntry = other.getEntry(rhsEndEntry->prev);
+  entry_type *const rhsEndEntry = &other.getTailQData().m_endEntry;
+  entry_type *const rhsFirstEntry = other.getEntry(rhsEndEntry->next);
+  entry_type *const rhsLastEntry = other.getEntry(rhsEndEntry->prev);
 
   // Fix the linkage at the beginning and end of each list into
   // the end entries.
-  lhsFirstEntry->prev = lhsLastEntry->next =
-      reinterpret_cast<uintptr_t>(rhsEndEntry);
-
-  rhsFirstEntry->prev = rhsLastEntry->next =
-      reinterpret_cast<uintptr_t>(lhsEndEntry);
+  lhsFirstEntry->prev = lhsLastEntry->next = entry_ref_type{rhsEndEntry};
+  rhsFirstEntry->prev = rhsLastEntry->next = entry_ref_type{lhsEndEntry};
 
   // Swap the end entries and size containers.
   std::swap(*lhsEndEntry, *rhsEndEntry);
-  std::swap(getSizeRef(), other.getSizeRef());
+  std::swap(getTailQData().m_sz, other.getTailQData().m_sz);
 }
 
-template <typename T, typename E, typename D>
+template <typename T, typename E, typename S, typename D>
 template <typename QueueIt>
-void tailq_base<T, E, D>::insert_range(const_iterator pos, QueueIt first,
-                                       QueueIt last) noexcept {
+void tailq_base<T, E, S, D>::insert_range(const_iterator pos, QueueIt first,
+                                          QueueIt last) noexcept {
   // Inserts the closed range [first, last] before pos.
-  tailq_entry *const posEntry = getEntry(pos);
-  tailq_entry *const firstEntry = QueueIt::container::getEntry(first);
-  tailq_entry *const lastEntry = QueueIt::container::getEntry(last);
+  entry_type *const posEntry = getEntry(pos);
+  entry_type *const firstEntry = QueueIt::container::getEntry(first);
+  entry_type *const lastEntry = QueueIt::container::getEntry(last);
 
-  tailq_entry *const beforePosEntry =
-      tailq_link_encoder::getEntry(pos.rEntryAccessor, posEntry->prev);
+  entry_type *const beforePosEntry =
+      entry_ref_codec::get_entry(pos.m_rEntryAccessor,
+                                 posEntry->prev.*EntryRefMember);
 
   firstEntry->prev = posEntry->prev;
-  beforePosEntry->next = first.current;
-  lastEntry->next = pos.current;
-  posEntry->prev = last.current;
+  beforePosEntry->next = first.m_current;
+  lastEntry->next = pos.m_current;
+  posEntry->prev = last.m_current;
 }
 
-template <typename T, typename E, typename D>
-void tailq_base<T, E, D>::remove_range(const_iterator first,
-                                       const_iterator last) noexcept {
+template <typename T, typename E, typename S, typename D>
+void tailq_base<T, E, S, D>::remove_range(const_iterator first,
+                                          const_iterator last) noexcept {
   // Removes the closed range [first, last].
-  tailq_entry *const firstEntry = getEntry(first);
-  tailq_entry *const lastEntry = getEntry(last);
+  entry_type *const firstEntry = getEntry(first);
+  entry_type *const lastEntry = getEntry(last);
 
-  auto &entryAccessor = first.rEntryAccessor;
+  entry_type *const beforeFirstEntry =
+      entry_ref_codec::get_entry(first.m_rEntryAccessor,
+                                 firstEntry->prev.*EntryRefMember);
 
-  tailq_entry *const beforeFirstEntry =
-      tailq_link_encoder::getEntry(entryAccessor, firstEntry->prev);
-
-  tailq_entry *const afterLastEntry =
-      tailq_link_encoder::getEntry(entryAccessor, lastEntry->next);
+  entry_type *const afterLastEntry =
+      entry_ref_codec::get_entry(last.m_rEntryAccessor,
+                                 lastEntry->next.*EntryRefMember);
 
   beforeFirstEntry->next = lastEntry->next;
   afterLastEntry->prev = firstEntry->prev;

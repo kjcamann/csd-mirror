@@ -1,21 +1,21 @@
 #ifndef BDS_LIST_MODIFIER_TESTS_H
 #define BDS_LIST_MODIFIER_TESTS_H
 
-#include <catch/catch.hpp>
+#include <catch2/catch.hpp>
 #include "list_test_util.h"
 
 template <typename T>
 constexpr bool is_base_u = false;
 
-template <typename LinkType>
+template <template <typename> class LinkType>
 constexpr bool is_base_u<BaseU<LinkType>> = true;
 
-template <typename ListType>
+template <bds::LinkedList ListType>
 void basic_tests() {
   // Test the basic modifiers (single element insert and erase) and accessors
   // (size, empty, front, and back) of the list; also checks the functioning
   // of the iterators and begin(), end().
-  using E = typename ListType::value_type;
+  using E = ListType::value_type;
   E e[] = { {0}, {1} };
 
   ListType head;
@@ -156,45 +156,9 @@ void basic_tests() {
     REQUIRE( head.before_end() == head.begin() );
 }
 
-template <typename ListType>
-void dtor_test() {
-  // Ensure the destructor clears the list.
-  using E = typename ListType::value_type;
-  E e{0};
-
-  alignas(ListType) char buffer[sizeof(ListType)];
-  ListType &head = *new(buffer) ListType{};
-
-  insert_front(head, &e);
-
-  REQUIRE( std::size(head) == 1 );
-  REQUIRE( !std::empty(head) );
-  REQUIRE( std::addressof(*head.begin()) == &e );
-  REQUIRE( head.begin() != head.end() );
-  if constexpr (bds::STailQ<ListType>)
-    REQUIRE( head.before_end() == head.begin() );
-
-  head.~ListType();
-
-  // Accessing `head` outside of its lifetime is undefined behavior, and
-  // the effects of the destructor that affect the object itself (like the
-  // head's list entries and size) are indeed optimized out by gcc at
-  // higher optimization levels, so these tests fail when NDEBUG is defined.
-  // FIXME: it's not clear that the destructor should have a unit test at
-  // all, because it doesn't have any effects that are guaranteed to be
-  // observed. Remove this?
-#if !defined(NDEBUG)
-  REQUIRE( std::size(head) == 0 );
-  REQUIRE( std::empty(head) );
-  REQUIRE( head.begin() == head.end() );
-  if constexpr (bds::STailQ<ListType>)
-    REQUIRE( head.before_end() == head.end() );
-#endif
-}
-
-template <typename ListType>
+template <bds::LinkedList ListType>
 void clear_tests() {
-  using E = typename ListType::value_type;
+  using E = ListType::value_type;
   E e{0};
 
   ListType head;
@@ -224,9 +188,9 @@ void clear_tests() {
     REQUIRE( std::addressof(head.back()) == &e );
 }
 
-template <typename ListType1, typename ListType2>
+template <bds::LinkedList ListType1, bds::LinkedList ListType2>
 void move_ctor_tests() {
-  using E = typename ListType1::value_type;
+  using E = ListType1::value_type;
   static_assert(std::is_same_v<E, typename ListType2::value_type>);
 
   ListType1 head;
@@ -250,11 +214,34 @@ void move_ctor_tests() {
   }
 
   movedHead.clear();
+
+  if constexpr (bds::SListOrQueue<ListType1> && bds::SListOrQueue<ListType2> &&
+                TestProxy<ListType1> && TestProxy<ListType2>) {
+    // Test that we can move-construct the fwd_head types; this is only allowed
+    // for slist and stailq. tailq_fwd_head has a deleted move constructor
+    // as explained in the documentation.
+    typename ListType1::fwd_head_type oldFwdHead;
+    typename ListType1::list_proxy_type oldHead{oldFwdHead};
+
+    insert_front(oldHead, &e);
+    REQUIRE( std::size(oldHead) == 1 );
+
+    typename ListType2::fwd_head_type newFwdHead{std::move(oldFwdHead)};
+    typename ListType2::list_proxy_type newHead{newFwdHead};
+
+    REQUIRE( std::addressof(newHead.front()) == &e );
+    REQUIRE( std::size(newHead) == 1 );
+    REQUIRE( !std::empty(newHead) );
+
+    REQUIRE( std::size(oldHead) == 0 );
+    REQUIRE( std::empty(oldHead) );
+    REQUIRE( oldHead.begin() == oldHead.end() );
+  }
 }
 
 template <typename ListType1, typename ListType2>
 void move_assign_tests() {
-  using E = typename ListType1::value_type;
+  using E = ListType1::value_type;
   static_assert(std::is_same_v<E, typename ListType2::value_type>);
 
   ListType1 oldHead;
@@ -281,24 +268,47 @@ void move_assign_tests() {
     REQUIRE( oldHead.get_entry_accessor().movedFrom == true );
     REQUIRE( newHead.get_entry_accessor().movedFrom == false );
   }
+
+  if constexpr (bds::SListOrQueue<ListType1> && bds::SListOrQueue<ListType2> &&
+                TestProxy<ListType1> && TestProxy<ListType2>) {
+    // Test that we can move-assign the fwd_head types; the same comments apply
+    // as in the move-construction tests.
+    typename ListType1::fwd_head_type oldFwdHead;
+    typename ListType2::fwd_head_type newFwdHead;
+
+    typename ListType1::list_proxy_type oldHead{oldFwdHead};
+    typename ListType2::list_proxy_type newHead{newFwdHead};
+
+    insert_front(oldHead, &e);
+    REQUIRE( std::size(oldHead) == 1 );
+    newFwdHead = std::move(oldFwdHead);
+
+    REQUIRE( std::addressof(newHead.front()) == &e );
+    REQUIRE( std::size(newHead) == 1 );
+    REQUIRE( !std::empty(newHead) );
+
+    REQUIRE( std::size(oldHead) == 0 );
+    REQUIRE( std::empty(oldHead) );
+    REQUIRE( oldHead.begin() == oldHead.end() );
+  }
 }
 
-template <typename ListHeadType, typename ListContType>
+template <bds::LinkedList ListHeadType, bds::LinkedList ListProxyType>
 void move_tests() {
   SECTION("move_ctor.head_head") { move_ctor_tests<ListHeadType, ListHeadType>(); }
-  SECTION("move_ctor.cont_cont") { move_ctor_tests<ListContType, ListContType>(); }
-  SECTION("move_ctor.head_cont") { move_ctor_tests<ListHeadType, ListContType>(); }
-  SECTION("move_ctor.cont_head") { move_ctor_tests<ListContType, ListHeadType>(); }
+  SECTION("move_ctor.cont_cont") { move_ctor_tests<ListProxyType, ListProxyType>(); }
+  SECTION("move_ctor.head_cont") { move_ctor_tests<ListHeadType, ListProxyType>(); }
+  SECTION("move_ctor.cont_head") { move_ctor_tests<ListProxyType, ListHeadType>(); }
 
   SECTION("move_assign.head_head") { move_assign_tests<ListHeadType, ListHeadType>(); }
-  SECTION("move_assign.cont_cont") { move_assign_tests<ListContType, ListContType>(); }
-  SECTION("move_assign.head_cont") { move_assign_tests<ListHeadType, ListContType>(); }
-  SECTION("move_assign.cont_head") { move_assign_tests<ListContType, ListHeadType>(); }
+  SECTION("move_assign.cont_cont") { move_assign_tests<ListProxyType, ListProxyType>(); }
+  SECTION("move_assign.head_cont") { move_assign_tests<ListHeadType, ListProxyType>(); }
+  SECTION("move_assign.cont_head") { move_assign_tests<ListProxyType, ListHeadType>(); }
 }
 
-template <typename ListType>
+template <bds::LinkedList ListType>
 void extra_ctor_tests() {
-  using E = typename ListType::value_type;
+  using E = ListType::value_type;
 
   E e[] = { {0}, {1}, {2} };
 
@@ -337,9 +347,9 @@ void extra_ctor_tests() {
   }
 }
 
-template <typename ListType>
+template <bds::LinkedList ListType>
 void bulk_insert_tests() {
-  using E = typename ListType::value_type;
+  using E = ListType::value_type;
 
   ListType head;
   E e[] = { {0}, {1}, {2} };
@@ -455,35 +465,34 @@ void bulk_insert_tests() {
   }
 }
 
-template <typename ListHeadType>
+template <bds::LinkedList ListHeadType>
 void for_each_safe_tests() {
-  using S = BaseS<typename ListHeadType::entry_type>;
-
+  using E = ListHeadType::value_type;
   ListHeadType head;
-  S *s[] = { new S{.i = 0}, new S{.i = 1}, new S{.i = 2} };
+  E *e[] = { new E{0}, new E{1}, new E{2} };
 
-  insert_front(head, std::begin(s), std::end(s));
-  head.for_each_safe([&head] (S &item) {
+  insert_front(head, std::begin(e), std::end(e));
+  head.for_each_safe([&head] (E &item) {
     erase_front(head);
-    S *const p = std::addressof(item);
+    E *const p = std::addressof(item);
 
     // Placement new a dummy value over the top of the item to simulate
     // it being deleted to verify that it was actually deleted
-    new (p) S{.i = 123};
+    new(p) E{123};
     std::memset(&p->next, 0, sizeof(typename ListHeadType::entry_type));
   });
 
   REQUIRE( head.empty() );
 
-  for (S *item : s) {
+  for (E *item : e) {
     REQUIRE(item->i == 123);
     delete item;
   }
 }
 
-template <typename ListType1, typename ListType2>
+template <bds::LinkedList ListType1, bds::LinkedList ListType2>
 void swap_lists() {
-  using E = typename ListType1::value_type;
+  using E = ListType1::value_type;
   static_assert(std::is_same_v<E, typename ListType2::value_type>);
 
   ListType1 head1;
@@ -527,17 +536,17 @@ void swap_lists() {
   }
 }
 
-template <typename ListHeadType, typename ListContType>
+template <bds::LinkedList ListHeadType, bds::LinkedList ListProxyType>
 void swap_tests() {
   SECTION("same_type_head") { swap_lists<ListHeadType, ListHeadType>(); }
-  SECTION("same_type_fwd") { swap_lists<ListContType, ListContType>(); }
-  SECTION("swap_to_fwd_head") { swap_lists<ListHeadType, ListContType>(); }
-  SECTION("swap_from_fwd_head") { swap_lists<ListContType, ListHeadType>(); }
+  SECTION("same_type_fwd") { swap_lists<ListProxyType, ListProxyType>(); }
+  SECTION("swap_to_fwd_head") { swap_lists<ListHeadType, ListProxyType>(); }
+  SECTION("swap_from_fwd_head") { swap_lists<ListProxyType, ListHeadType>(); }
 }
 
 template <bds::SListOrQueue ListType>
 void find_predecessor_tests() {
-  using E = typename ListType::value_type;
+  using E = ListType::value_type;
 
   ListType head;
   E e[] = { {0}, {1} };
@@ -563,6 +572,32 @@ void find_predecessor_tests() {
     if constexpr (bds::STailQ<ListType>)
       REQUIRE( std::addressof(head.back()) == &e[1] );
   }
+}
+
+template <typename ProxyType>
+void proxy_test_helper(ProxyType head, ProxyType::value_type *e) {
+  insert_front(head, e);
+  REQUIRE( std::size(head) == 2 );
+}
+
+template <typename FwdHeadType, typename ProxyType>
+void proxy_tests() {
+  // Test that a fwd_head can be bound to another proxy wrapper and it will
+  // affect the state of the fwd_head object when accessed through the original
+  // wrapper. This also shows the implicit construction of the proxy wrapper
+  // from the fwd_head (in the function call), and tests that the destructor of
+  // the proxy wrapper (at the end of the called function) does not
+  // affect/damage the list when accessed through the original proxy.
+  FwdHeadType fwdHead;
+  ProxyType head{fwdHead};
+
+  using E = ProxyType::value_type;
+  E e[] = { {0}, {1} };
+
+  insert_front(head, &e[0]);
+  REQUIRE( std::size(head) == 1 );
+  proxy_test_helper<ProxyType>(fwdHead, &e[1]);
+  REQUIRE( std::size(head) == 2 );
 }
 
 #endif

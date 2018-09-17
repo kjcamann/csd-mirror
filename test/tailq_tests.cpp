@@ -4,7 +4,7 @@
 #include <random>
 #include <type_traits>
 
-#include <catch/catch.hpp>
+#include <catch2/catch.hpp>
 #include <bds/tailq.h>
 
 #include "list_modifier_tests.h"
@@ -16,29 +16,37 @@ using S = BaseS<tailq_entry>;
 using T = BaseT<tailq_entry>;
 using U = BaseU<tailq_entry>;
 
-using SEntryOffset = tailq_entry_offset<offsetof(S, next)>;
+using tq_head_t = BDS_TAILQ_HEAD_OFFSET_T(S, next);
+using tq_head_inline_t = BDS_TAILQ_HEAD_OFFSET_T(S, next, std::size_t);
+using tq_head_invoke_t = tailq_head_cinvoke_t<&T::next>;
+using tq_head_stateful_t = tailq_head<U, U::accessor_type>;
 
-using tq_head_t = tailq_head<S, SEntryOffset, no_size>;
-using tq_head_inline_t = tailq_head<S, SEntryOffset, std::size_t>;
-using tq_head_invoke_t = tailq_head<T, constexpr_invocable<&T::next>, no_size>;
-using tq_head_stateful_t = tailq_head<U, U::accessor_type, no_size>;
-
-using tq_fwd_head_t = tailq_fwd_head<no_size>;
-using tq_container_t = tailq_container<S, SEntryOffset, no_size>;
-using tq_container_stateful_t = tailq_container<U, U::accessor_type, no_size>;
-using tq_test_container_t = list_test_container<tq_container_t>;
-using tq_test_container_stateful_t = list_test_container<tq_container_stateful_t>;
+using tq_fwd_head_t = tailq_fwd_head<S>;
+using tq_proxy_t = BDS_TAILQ_PROXY_OFFSET_T(S, next);
+using tq_proxy_stateful_t = tailq_proxy<tailq_fwd_head<U>, U::accessor_type>;
+using tq_test_proxy_t = list_test_proxy<tq_proxy_t>;
+using tq_test_proxy_stateful_t = list_test_proxy<tq_proxy_stateful_t>;
 
 // Compile-time tests of list traits classes.
 static_assert(TailQ<tq_head_t>);
-static_assert(TailQ<tq_container_t>);
-static_assert(TailQ<tq_test_container_t>);
+static_assert(TailQ<tq_proxy_t>);
+static_assert(TailQ<tq_test_proxy_t>);
 
 static_assert(!TailQ<tq_fwd_head_t>);
 static_assert(!TailQ<int>);
 
 static_assert(!SList<tq_head_t>);
-static_assert(!SList<tq_container_t>);
+static_assert(!SList<tq_proxy_t>);
+
+// This doesn't really belong here, but we need to ensure both invocable_link
+// and offset_link remain standard layout, so that they can use the common
+// initial sequence rule to read from either `link_union` member, regardless
+// of which member was written. This is needed to get proper default
+// initialization for tailq_entry<T>, where we cannot know which union member
+// will be used, so we pick one.
+static_assert(
+    std::is_standard_layout_v<bds::invocable_tagged_ref<tailq_entry<S>, S>> &&
+    std::is_standard_layout_v<bds::offset_entry_ref<tailq_entry<S>>>);
 
 TEST_CASE("tailq.basic.offset", "[tailq][basic][offset]") {
   // "offset" in the test case name refers to the offsetof(...) link accessor
@@ -54,15 +62,13 @@ TEST_CASE("tailq.basic.member_invoke", "[tailq][basic][member_invoke]") {
   basic_tests<tq_head_invoke_t>();
 }
 
-TEST_CASE("tailq.basic.forward", "[tailq][basic][forward]") {
-  basic_tests<tq_test_container_t>();
+TEST_CASE("tailq.basic.proxy", "[tailq][basic][proxy]") {
+  basic_tests<tq_test_proxy_t>();
 }
 
 TEST_CASE("tailq.basic.stateful", "[tailq][basic][stateful]") {
   basic_tests<tq_head_stateful_t>();
 }
-
-TEST_CASE("tailq.dtor", "[tailq]") { dtor_test<tq_head_t>(); }
 
 TEST_CASE("tailq.clear", "[tailq]") {
   SECTION("offset_no_size") { clear_tests<tq_head_t>(); }
@@ -70,18 +76,18 @@ TEST_CASE("tailq.clear", "[tailq]") {
 }
 
 TEST_CASE("tailq.move", "[tailq]") {
-  SECTION("stateless") { move_tests<tq_head_t, tq_test_container_t>(); }
-  SECTION("stateful") { move_tests<tq_head_stateful_t, tq_test_container_stateful_t>(); }
+  SECTION("stateless") { move_tests<tq_head_t, tq_test_proxy_t>(); }
+  SECTION("stateful") { move_tests<tq_head_stateful_t, tq_test_proxy_stateful_t>(); }
 }
 
 TEST_CASE("tailq.extra_ctor", "[tailq]") {
   extra_ctor_tests<tq_head_t>();
-  extra_ctor_tests<tq_test_container_t>();
+  extra_ctor_tests<tq_test_proxy_t>();
 }
 
 TEST_CASE("tailq.bulk_insert", "[tailq]") {
   bulk_insert_tests<tq_head_t>();
-  bulk_insert_tests<tq_test_container_t>();
+  bulk_insert_tests<tq_test_proxy_t>();
 }
 
 TEST_CASE("tailq.bulk_erase", "[tailq]") {
@@ -164,8 +170,12 @@ TEST_CASE("tailq.push_pop", "[tailq]") {
 }
 
 TEST_CASE("tailq.swap", "[tailq]") {
-  SECTION("stateless") { swap_tests<tq_head_t, tq_test_container_t>(); }
-  SECTION("stateful") { swap_tests<tq_head_stateful_t, tq_test_container_stateful_t>(); }
+  SECTION("stateless") { swap_tests<tq_head_t, tq_test_proxy_t>(); }
+  SECTION("stateful") { swap_tests<tq_head_stateful_t, tq_test_proxy_stateful_t>(); }
+}
+
+TEST_CASE("tailq.proxy", "[tailq]") {
+  proxy_tests<tq_fwd_head_t, tq_proxy_t>();
 }
 
 TEST_CASE("tailq.merge", "[tailq][oper]") { merge_tests<tq_head_t>(); }
@@ -227,7 +237,7 @@ TEST_CASE("tailq.splice", "[tailq][oper]") {
 
   SECTION("other_derived_type") {
     tq_fwd_head_t fwdHead2;
-    tq_container_t head2{fwdHead2};
+    tq_proxy_t head2{fwdHead2};
 
     head1.insert(head1.end(), { &s[0] });
     head2.insert(head2.end(), { &s[1], &s[2], &s[3] });

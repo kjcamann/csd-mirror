@@ -1,27 +1,27 @@
 #ifndef BDS_LIST_OPERATION_TESTS_H
 #define BDS_LIST_OPERATION_TESTS_H
 
-#include <catch/catch.hpp>
+#include <catch2/catch.hpp>
 #include "list_test_util.h"
 
 // Number of iterations to run for random input tests (merge, sort, etc.)
 constexpr std::size_t nIter = 1UL << 10;
 
-template <typename ListHeadType>
+template <bds::LinkedList ListHeadType>
 void merge_tests() {
-  using S = BaseS<typename ListHeadType::entry_type>;
+  using E = ListHeadType::value_type;
 
-  constexpr auto comp = [](const S &lhs, const S &rhs) { return lhs.i < rhs.i; };
-  constexpr auto equal = [](const S &lhs, const S &rhs) { return lhs.i == rhs.i; };
+  constexpr auto comp = [](const E &lhs, const E &rhs) { return lhs.i < rhs.i; };
+  constexpr auto equal = [](const E &lhs, const E &rhs) { return lhs.i == rhs.i; };
 
   SECTION("simple_case") {
     ListHeadType head1;
     ListHeadType head2;
 
-    S s[] = { S{.i = 0}, S{.i = 1}, S{.i = 2}, S{.i = 3} };
+    E e[] = { {0}, {1}, {2}, {3} };
 
-    insert_front(head1, { &s[0], &s[2] });
-    insert_front(head2, { &s[1], &s[3] });
+    insert_front(head1, { &e[0], &e[2] });
+    insert_front(head2, { &e[1], &e[3] });
 
     const auto totalSize = std::size(head1) + std::size(head2);
 
@@ -37,7 +37,7 @@ void merge_tests() {
     REQUIRE( isSizeOk );
 
     if constexpr (bds::STailQ<ListHeadType>)
-      REQUIRE( std::addressof(*head1.before_end()) == &s[3] );
+      REQUIRE( std::addressof(*head1.before_end()) == &e[3] );
 
     // Check that merge with an empty list is a no-op
     head1.merge(head2, comp);
@@ -120,40 +120,46 @@ void merge_tests() {
   }
 }
 
-template <typename ListHeadType>
+template <bds::LinkedList ListHeadType>
 void remove_tests() {
-  using S = BaseS<typename ListHeadType::entry_type>;
+  using E = ListHeadType::value_type;
   ListHeadType head;
 
-  S s[] = { S{.i = 0}, S{.i = 1}, S{.i = 2}, S{.i = 3} };
-  insert_front(head, { &s[0], &s[1], &s[2], &s[3] });
-  head.remove_if([] (const S &item) { return (item.i & 0x1) == 0; });
+  E e[] = { {0}, {1}, {2}, {4}, {3} };
+  insert_front(head, { &e[0], &e[1], &e[2], &e[3], &e[4] });
+  const auto nRemoved =
+      head.remove_if([] (const E &item) { return (item.i & 0x1) == 0; });
 
+  REQUIRE( nRemoved == 3 );
   REQUIRE( std::size(head) == 2 );
   auto i = head.begin();
-  REQUIRE( std::addressof(*i++) == &s[1] );
-  REQUIRE( std::addressof(*i++) == &s[3] );
+  REQUIRE( std::addressof(*i++) == &e[1] );
+  REQUIRE( std::addressof(*i++) == &e[4] );
   REQUIRE( i == head.end() );
   if constexpr (bds::STailQ<ListHeadType>)
-    REQUIRE( std::addressof(*head.before_end()) == &s[3] );
+    REQUIRE( std::addressof(*head.before_end()) == &e[4] );
+
+  // Also test uniform container erasure
+  erase_if(head, [] (const E &item) { return (item.i) & 0x1 == 1; });
+  REQUIRE( std::size(head) == 0 );
 }
 
-template <typename ListHeadType>
+template <bds::LinkedList ListHeadType>
 void reverse_tests() {
-  using S = BaseS<typename ListHeadType::entry_type>;
+  using E = ListHeadType::value_type;
   ListHeadType head;
 
-  S s[] = { S{.i = 0}, S{.i = 1}, S{.i = 2} };
-  insert_front(head, { &s[0], &s[1], &s[2] });
+  E e[] = { {0}, {1}, {2} };
+  insert_front(head, { &e[0], &e[1], &e[2] });
   head.reverse();
 
   auto i = head.begin();
-  REQUIRE( std::addressof(*i++) == &s[2] );
-  REQUIRE( std::addressof(*i++) == &s[1] );
-  REQUIRE( std::addressof(*i++) == &s[0] );
+  REQUIRE( std::addressof(*i++) == &e[2] );
+  REQUIRE( std::addressof(*i++) == &e[1] );
+  REQUIRE( std::addressof(*i++) == &e[0] );
   REQUIRE( i == head.end() );
   if constexpr (bds::STailQ<ListHeadType>)
-    REQUIRE( std::addressof(*head.before_end()) == &s[0] );
+    REQUIRE( std::addressof(*head.before_end()) == &e[0] );
 
   // Check reverse of empty list is a no-op
   head.clear();
@@ -163,79 +169,79 @@ void reverse_tests() {
     REQUIRE( head.before_end() == head.end() );
 }
 
-template <typename ListHeadType>
+template <bds::LinkedList ListHeadType>
 void unique_tests() {
-  using S = BaseS<typename ListHeadType::entry_type>;
+  using E = ListHeadType::value_type;
   ListHeadType head;
 
-  S s[] = { S{.i = 0}, S{.i = 0}, S{.i = 1}, S{.i = 1}, S{.i = 2} };
-  insert_front(head, { &s[0], &s[1], &s[2], &s[3], &s[4] });
-  head.unique([] (const S &lhs, const S &rhs) { return lhs.i == rhs.i; });
+  E e[] = { {0}, {0}, {1}, {1}, {2} };
+  insert_front(head, { &e[0], &e[1], &e[2], &e[3], &e[4] });
+  head.unique([] (const E &lhs, const E &rhs) { return lhs.i == rhs.i; });
 
   REQUIRE( std::size(head) == 3 );
   auto i = head.begin();
-  REQUIRE( std::addressof(*i++) == &s[0] );
-  REQUIRE( std::addressof(*i++) == &s[2] );
-  REQUIRE( std::addressof(*i++) == &s[4] );
+  REQUIRE( std::addressof(*i++) == &e[0] );
+  REQUIRE( std::addressof(*i++) == &e[2] );
+  REQUIRE( std::addressof(*i++) == &e[4] );
   REQUIRE( i == head.end() );
 
   if constexpr (bds::STailQ<ListHeadType>)
-    REQUIRE( std::addressof(*head.before_end()) == &s[4] );
+    REQUIRE( std::addressof(*head.before_end()) == &e[4] );
 }
 
-template <typename ListHeadType>
+template <bds::LinkedList ListHeadType>
 void sort_tests() {
-  using S = BaseS<typename ListHeadType::entry_type>;
+  using E = ListHeadType::value_type;
   ListHeadType head;
 
-  S s[] = { S{.i = 0}, S{.i = 1}, S{.i = 2}, S{.i = 3}, S{.i = 0} };
-  constexpr auto comp = [] (const S &lhs, const S &rhs) { return lhs.i < rhs.i; };
-  constexpr auto equal = [](const S &lhs, const S &rhs) { return lhs.i == rhs.i; };
+  E e[] = { {0}, {1}, {2}, {3}, {0} };
+  constexpr auto comp = [] (const E &lhs, const E &rhs) { return lhs.i < rhs.i; };
+  constexpr auto equal = [](const E &lhs, const E &rhs) { return lhs.i == rhs.i; };
 
   SECTION("reversed") {
-    insert_front(head, { &s[3], &s[2], &s[1], &s[0] });
+    insert_front(head, { &e[3], &e[2], &e[1], &e[0] });
     head.sort(comp);
 
     REQUIRE( std::size(head) == 4 );
     auto i = head.begin();
-    REQUIRE( std::addressof(*i++) == &s[0] );
-    REQUIRE( std::addressof(*i++) == &s[1] );
-    REQUIRE( std::addressof(*i++) == &s[2] );
-    REQUIRE( std::addressof(*i++) == &s[3] );
+    REQUIRE( std::addressof(*i++) == &e[0] );
+    REQUIRE( std::addressof(*i++) == &e[1] );
+    REQUIRE( std::addressof(*i++) == &e[2] );
+    REQUIRE( std::addressof(*i++) == &e[3] );
     REQUIRE( i == head.end() );
 
     if constexpr (bds::STailQ<ListHeadType>)
-      REQUIRE( std::addressof(*head.before_end()) == &s[3] );
+      REQUIRE( std::addressof(*head.before_end()) == &e[3] );
   }
 
   SECTION("sequence1") {
-    insert_front(head, { &s[2], &s[0], &s[3] });
+    insert_front(head, { &e[2], &e[0], &e[3] });
     head.sort(comp);
 
     REQUIRE( std::size(head) == 3 );
     auto i = head.begin();
-    REQUIRE( std::addressof(*i++) == &s[0] );
-    REQUIRE( std::addressof(*i++) == &s[2] );
-    REQUIRE( std::addressof(*i++) == &s[3] );
+    REQUIRE( std::addressof(*i++) == &e[0] );
+    REQUIRE( std::addressof(*i++) == &e[2] );
+    REQUIRE( std::addressof(*i++) == &e[3] );
     REQUIRE( i == head.end() );
 
     if constexpr (bds::STailQ<ListHeadType>)
-      REQUIRE( std::addressof(*head.before_end()) == &s[3] );
+      REQUIRE( std::addressof(*head.before_end()) == &e[3] );
   }
 
   SECTION("sequence2") {
-    insert_front(head, { &s[0], &s[3], &s[4] });
+    insert_front(head, { &e[0], &e[3], &e[4] });
     head.sort(comp);
 
     REQUIRE( std::size(head) == 3 );
     auto i = head.begin();
-    REQUIRE( std::addressof(*i++) == &s[4] );
-    REQUIRE( std::addressof(*i++) == &s[0] );
-    REQUIRE( std::addressof(*i++) == &s[3] );
+    REQUIRE( std::addressof(*i++) == &e[4] );
+    REQUIRE( std::addressof(*i++) == &e[0] );
+    REQUIRE( std::addressof(*i++) == &e[3] );
     REQUIRE( i == head.end() );
 
     if constexpr (bds::STailQ<ListHeadType>)
-      REQUIRE( std::addressof(*head.before_end()) == &s[3] );
+      REQUIRE( std::addressof(*head.before_end()) == &e[3] );
   }
 
   SECTION("random") {

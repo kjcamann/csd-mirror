@@ -9,28 +9,31 @@
 #include <utility>
 #include <vector>
 
-template <typename LinkEntryType>
+#include <bds/listfwd.h>
+
+template <template <typename> class LinkEntryType>
 struct BaseS {
   std::int64_t i;
-  LinkEntryType next;
+  LinkEntryType<BaseS> next;
 };
 
-template <typename LinkEntryType>
+template <template <typename> class LinkEntryType>
 class BaseT {
 public:
   BaseT(std::int64_t i) noexcept : _i{i} {}
 
   std::int64_t &i() noexcept { return _i; }
-  LinkEntryType &next() noexcept { return _next; }
+  LinkEntryType<BaseT> &next() noexcept { return _next; }
 
 private:
   std::int64_t _i;
-  LinkEntryType _next;
+  LinkEntryType<BaseT> _next;
 };
 
-template <typename> class BaseU;
+template <template <typename> class>
+class BaseU;
 
-template <typename LinkEntryType>
+template <template <typename> class LinkEntryType>
 class StatefulAccessorU {
 public:
   StatefulAccessorU() noexcept : numAccesses{0}, movedFrom{false} {}
@@ -54,7 +57,8 @@ public:
     return *this;
   }
 
-  LinkEntryType &operator()(BaseU<LinkEntryType> &u) noexcept {
+  LinkEntryType<BaseU<LinkEntryType>>
+  &operator()(BaseU<LinkEntryType> &u) noexcept {
     ++numAccesses;
     return u._next;
   }
@@ -63,7 +67,7 @@ public:
   bool movedFrom;
 };
 
-template <typename LinkEntryType>
+template <template <typename> class LinkEntryType>
 class BaseU {
 public:
   using accessor_type = StatefulAccessorU<LinkEntryType>;
@@ -73,53 +77,54 @@ public:
 private:
   friend class StatefulAccessorU<LinkEntryType>;
   std::int64_t _i;
-  LinkEntryType _next;
+  LinkEntryType<BaseU> _next;
 };
 
 // Ordinarily a "fwd_head" type (e.g., tailq_fwd_head) is used to declare a
 // list head when the entry accessor cannot be not defined yet. Somewhere
 // else in the code (after the accessor can be defined), the corresponding
-// container type is used. To ease the testing of the "fwd_head" pattern, we
+// proxy type is used. To ease the testing of the "fwd_head" pattern, we
 // make it more like the "head" style classes, in that a single declaration
-// declares both the fwd_head object and exposes the interface of the container,
+// declares both the fwd_head object and exposes the interface of the proxy,
 // via inheritance. This allows most test cases to be implemented as template
 // functions taking a single type parameter, which will either be the "_head"
 // type or this class.
-template <typename ListContType>
-struct list_test_container : public ListContType {
+template <typename ListProxyType>
+struct list_test_proxy : public ListProxyType {
 public:
-  using fwd_head_type = typename ListContType::fwd_head_type;
+  using fwd_head_type = ListProxyType::fwd_head_type;
+  using list_proxy_type = ListProxyType;
 
-  list_test_container() noexcept : ListContType{ctorFwdHead()} {}
+  list_test_proxy() noexcept : ListProxyType{ctorFwdHead()} {}
 
-  list_test_container(const list_test_container &) = delete;
+  list_test_proxy(const list_test_proxy &) = delete;
 
-  list_test_container(list_test_container &&other) noexcept
-      : ListContType{ctorFwdHead(), std::move(other)} {}
+  list_test_proxy(list_test_proxy &&other) noexcept
+      : ListProxyType{ctorFwdHead(), std::move(other)} {}
 
-  template <typename D>
-  list_test_container(typename ListContType::template other_list_t<D> &&other) noexcept
-      : ListContType{ctorFwdHead(), std::move(other)} {}
+  template <bds::CompressedSize S, typename D>
+  list_test_proxy(typename ListProxyType::template other_list_t<S, D> &&other) noexcept
+      : ListProxyType{ctorFwdHead(), std::move(other)} {}
 
   template <typename InputIt, typename... Ts>
-  list_test_container(InputIt first, InputIt last, Ts &&...vs) noexcept
-      : ListContType{ctorFwdHead(), first, last, std::forward<Ts>(vs)...} {}
+  list_test_proxy(InputIt first, InputIt last, Ts &&...vs) noexcept
+      : ListProxyType{ctorFwdHead(), first, last, std::forward<Ts>(vs)...} {}
 
   template <typename... Ts>
-  list_test_container(std::initializer_list<typename ListContType::value_type *> ilist, Ts &&...vs) noexcept
-      : ListContType{ctorFwdHead(), ilist, std::forward<Ts>(vs)...} {}
+  list_test_proxy(std::initializer_list<typename ListProxyType::value_type *> ilist, Ts &&...vs) noexcept
+      : ListProxyType{ctorFwdHead(), ilist, std::forward<Ts>(vs)...} {}
 
-  ~list_test_container() = default;
+  ~list_test_proxy() = default;
 
-  list_test_container &operator=(const list_test_container &) = delete;
+  list_test_proxy &operator=(const list_test_proxy &) = delete;
 
-  list_test_container &operator=(list_test_container &&other) noexcept {
-    this->ListContType::operator=(std::move(other));
+  list_test_proxy &operator=(list_test_proxy &&other) noexcept {
+    this->ListProxyType::operator=(std::move(other));
     return *this;
   }
 
-  list_test_container &operator=(std::initializer_list<typename ListContType::value_type *> ilist) noexcept {
-    this->ListContType::operator=(ilist);
+  list_test_proxy &operator=(std::initializer_list<typename ListProxyType::value_type *> ilist) noexcept {
+    this->ListProxyType::operator=(ilist);
     return *this;
   }
 
@@ -133,6 +138,12 @@ private:
   fwd_head_type &ctorFwdHead() noexcept {
     return *new (fwdHeadBuf) fwd_head_type{};
   }
+};
+
+template <bds::LinkedList T>
+concept bool TestProxy = requires {
+  typename T::fwd_head_type;
+  typename T::list_proxy_type;
 };
 
 // FIXME [docs]: explain why we can't use push_front here
@@ -167,12 +178,12 @@ auto insert_front(ListType &L, std::initializer_list<typename ListType::pointer>
 }
 
 template <bds::SListOrQueue ListType, typename S>
-auto insert_after(ListType &L, typename ListType::const_iterator i, S *s) noexcept {
+auto insert_after(ListType &L, ListType::const_iterator i, S *s) noexcept {
   return L.insert_after(i, s);
 }
 
 template <bds::TailQ ListType, typename S>
-auto insert_after(ListType &L, typename ListType::const_iterator i, S *s) noexcept {
+auto insert_after(ListType &L, ListType::const_iterator i, S *s) noexcept {
   return L.insert(std::next(i), s);
 }
 

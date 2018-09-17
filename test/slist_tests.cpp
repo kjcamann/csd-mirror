@@ -2,7 +2,7 @@
 #include <cstring>
 #include <type_traits>
 
-#include <catch/catch.hpp>
+#include <catch2/catch.hpp>
 #include <bds/slist.h>
 
 #include "list_modifier_tests.h"
@@ -14,29 +14,29 @@ using S = BaseS<slist_entry>;
 using T = BaseT<slist_entry>;
 using U = BaseU<slist_entry>;
 
-using SEntryOffset = slist_entry_offset<offsetof(S, next)>;
+using sl_head_t = BDS_SLIST_HEAD_OFFSET_T(S, next);
+using sl_head_inline_t = BDS_SLIST_HEAD_OFFSET_T(S, next, std::size_t);
+using sl_head_invoke_t = slist_head_cinvoke_t<&T::next>;
+using sl_head_stateful_t = slist_head<U, U::accessor_type>;
 
-using sl_head_t = slist_head<S, SEntryOffset, no_size>;
-using sl_head_inline_t = slist_head<S, SEntryOffset, std::size_t>;
-using sl_head_invoke_t = slist_head<T, constexpr_invocable<&T::next>, no_size>;
-using sl_head_stateful_t = slist_head<U, U::accessor_type, no_size>;
-
-using sl_fwd_head_t = slist_fwd_head<no_size>;
-using sl_container_t = slist_container<S, SEntryOffset, no_size>;
-using sl_container_stateful_t = slist_container<U, U::accessor_type, no_size>;
-using sl_test_container_t = list_test_container<sl_container_t>;
-using sl_test_container_stateful_t = list_test_container<sl_container_stateful_t>;
+using sl_fwd_head_t = slist_fwd_head<S>;
+using sl_proxy_t = BDS_SLIST_PROXY_OFFSET_T(S, next);
+using sl_proxy_inline_t = BDS_SLIST_PROXY_OFFSET_T(S, next, std::size_t);
+using sl_proxy_stateful_t = slist_proxy<slist_fwd_head<U>, U::accessor_type>;
+using sl_test_proxy_t = list_test_proxy<sl_proxy_t>;
+using sl_test_proxy_inline_t = list_test_proxy<sl_proxy_inline_t>;
+using sl_test_proxy_stateful_t = list_test_proxy<sl_proxy_stateful_t>;
 
 // Compile-time tests of list traits classes.
 static_assert(SList<sl_head_t>);
-static_assert(SList<sl_container_t>);
-static_assert(SList<sl_test_container_t>);
+static_assert(SList<sl_proxy_t>);
+static_assert(SList<sl_test_proxy_t>);
 
 static_assert(!SList<sl_fwd_head_t>);
 static_assert(!SList<int>);
 
 static_assert(!TailQ<sl_head_t>);
-static_assert(!TailQ<sl_container_t>);
+static_assert(!TailQ<sl_proxy_t>);
 
 TEST_CASE("slist.basic.offset", "[slist][basic][offset]") {
   basic_tests<sl_head_t>();
@@ -50,15 +50,13 @@ TEST_CASE("slist.basic.member_invoke", "[slist][basic][member_invoke]") {
   basic_tests<sl_head_invoke_t>();
 }
 
-TEST_CASE("slist.basic.forward", "[slist][basic][forward]") {
-  basic_tests<sl_test_container_t>();
+TEST_CASE("slist.basic.proxy", "[slist][basic][proxy]") {
+  basic_tests<sl_test_proxy_t>();
 }
 
 TEST_CASE("slist.basic.stateful", "[slist][basic][stateful]") {
   basic_tests<sl_head_stateful_t>();
 }
-
-TEST_CASE("slist.dtor", "[slist]") { dtor_test<sl_head_t>(); }
 
 TEST_CASE("slist.clear", "[slist]") {
   SECTION("offset_no_size") { clear_tests<sl_head_t>(); }
@@ -66,18 +64,22 @@ TEST_CASE("slist.clear", "[slist]") {
 }
 
 TEST_CASE("slist.move", "[slist]") {
-  SECTION("stateless") { move_tests<sl_head_t, sl_test_container_t>(); }
-  SECTION("stateful") { move_tests<sl_head_stateful_t, sl_test_container_stateful_t>(); }
+  SECTION("stateless") { move_tests<sl_head_t, sl_test_proxy_t>(); }
+  SECTION("stateful") { move_tests<sl_head_stateful_t, sl_test_proxy_stateful_t>(); }
+  SECTION("inline_computed") { move_tests<sl_head_inline_t, sl_head_t>(); }
+  SECTION("computed_inline") { move_tests<sl_head_t, sl_head_inline_t>(); }
+  SECTION("inline_computed2") { move_tests<sl_test_proxy_inline_t, sl_head_t>(); }
+  SECTION("computed_inline2") { move_tests<sl_head_t, sl_test_proxy_inline_t>(); }
 }
 
 TEST_CASE("slist.extra_ctor", "[slist]") {
   extra_ctor_tests<sl_head_t>();
-  extra_ctor_tests<sl_test_container_t>();
+  extra_ctor_tests<sl_test_proxy_t>();
 }
 
 TEST_CASE("slist.bulk_insert", "[slist]") {
   bulk_insert_tests<sl_head_t>();
-  bulk_insert_tests<sl_test_container_t>();
+  bulk_insert_tests<sl_test_proxy_t>();
 }
 
 TEST_CASE("slist.bulk_erase", "[slist]") {
@@ -139,12 +141,16 @@ TEST_CASE("slist.push_pop", "[slist]") {
 }
 
 TEST_CASE("slist.swap", "[slist]") {
-  SECTION("stateless") { swap_tests<sl_head_t, sl_test_container_t>(); }
-  SECTION("stateful") { swap_tests<sl_head_stateful_t, sl_test_container_stateful_t>(); }
+  SECTION("stateless") { swap_tests<sl_head_t, sl_test_proxy_t>(); }
+  SECTION("stateful") { swap_tests<sl_head_stateful_t, sl_test_proxy_stateful_t>(); }
 }
 
 TEST_CASE("slist.find_predecessor", "[slist]") {
   find_predecessor_tests<sl_head_t>();
+}
+
+TEST_CASE("slist.proxy", "[slist]") {
+  proxy_tests<sl_fwd_head_t, sl_proxy_t>();
 }
 
 TEST_CASE("slist.merge", "[slist][oper]") { merge_tests<sl_head_t>(); }
@@ -211,7 +217,7 @@ TEST_CASE("slist.splice", "[slist][oper]") {
 
   SECTION("other_derived_type") {
     sl_fwd_head_t fwdHead2;
-    sl_container_t head2{fwdHead2};
+    sl_proxy_t head2{fwdHead2};
 
     head1.insert_after(head1.before_begin(), { &s[0], &s[5] });
     head2.insert_after(head2.before_begin(), { &s[1], &s[2], &s[3], &s[4] });

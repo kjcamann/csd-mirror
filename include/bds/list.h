@@ -28,16 +28,15 @@
 
 namespace bds {
 
-template <typename SizeType>
-using list_fwd_head BDS_DEPRECATE_LIST_ATTR = tailq_fwd_head<SizeType>;
+template <typename T, CompressedSize SizeMember = no_size>
+using list_fwd_head BDS_DEPRECATE_LIST_ATTR = tailq_fwd_head<T, SizeMember>;
 
-template <typename T, typename EntryAccessor, SizeMember SizeType>
-using list_container BDS_DEPRECATE_LIST_ATTR =
-    tailq_container<T, EntryAccessor, SizeType>;
+template <typename FwdHead, typename EntryAccessor>
+using list_proxy BDS_DEPRECATE_LIST_ATTR = tailq_proxy<FwdHead, SizeMember>;
 
-template <typename T, typename EntryAccessor, SizeMember SizeType>
+template <typename T, typename EntryAccessor, CompressedSize SizeMember = no_size>
 using list_head BDS_DEPRECATE_LIST_ATTR =
-    tailq_head<T, EntryAccessor, SizeType>;
+    tailq_head<T, EntryAccessor, SizeMember>;
 
 } // End of namespace bsd
 
