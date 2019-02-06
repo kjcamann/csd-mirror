@@ -56,7 +56,7 @@ class tagged_ptr_union {
 public:
   tagged_ptr_union() noexcept : m_address{} {}
 
-  tagged_ptr_union(nullptr_t) noexcept : m_address{} {}
+  tagged_ptr_union(std::nullptr_t) noexcept : m_address{} {}
 
   tagged_ptr_union(const tagged_ptr_union &) = default;
 
@@ -125,7 +125,8 @@ public:
 private:
   std::uintptr_t m_address;
 
-  constexpr static std::size_t Mask = std::size_t((1ull << sizeof...(Ts) - 1) - 1);
+  constexpr static std::size_t Mask =
+      std::size_t((1ull << (sizeof...(Ts) - 1)) - 1);
 
   // FIXME [C++20]: zu literal for size_t
   // constexpr static std::size_t Mask = (1zu << sizeof...(Ts) - 1) - 1;
@@ -138,7 +139,7 @@ template <typename... Args, template <typename...> class Template>
 constexpr bool is_instantiated_from<Template<Args...>, Template> = true;
 
 template <typename Instance, template <typename...> class Template>
-concept bool InstantiatedFrom = is_instantiated_from<Instance, Template>;
+concept InstantiatedFrom = is_instantiated_from<Instance, Template>;
 
 // FIXME: we might be able to express this as a lambda inside the concept
 // definition rather than introducing this dummy function, but even simple
@@ -148,7 +149,7 @@ template <template <typename...> class Template, typename... Args>
 void derived_binds_to_base(Template<Args...> &);
 
 template <typename Instance, template <typename...> class Template>
-concept bool DerivedFromTemplate = requires(Instance instance) {
+concept DerivedFromTemplate = requires(Instance instance) {
   derived_binds_to_base<Template>(instance);
 };
 

@@ -16,6 +16,7 @@
 #define BDS_INTRUSIVE_H
 
 #include <cstddef>
+#include <iterator>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -49,23 +50,53 @@ struct offset_extractor {
   }
 };
 
-template <typename EntryType, typename EntryAccess, typename T>
-concept bool InvocableEntryAccessor = requires(EntryAccess e, T &t) {
-    {std::invoke(e, t)} -> EntryType &
+template <typename EntryAccess, typename EntryType, typename T>
+concept InvocableEntryAccessor = requires(EntryAccess e, T &t) {
+    {std::invoke(e, t)} -> EntryType &;
 };
 
 template <typename C>
-concept bool Stateless = std::is_empty_v<C> &&
+concept Stateless = std::is_empty_v<C> &&
     std::is_trivially_constructible_v<C>;
 
 struct no_size {};
 
 template <typename T>
-concept bool CompressedSize = std::is_integral_v<T> || std::is_same_v<T, no_size>;
+concept CompressedSize = std::is_integral_v<T> || std::is_same_v<T, no_size>;
 
-/// @brief Stores a reseatable reference to a `std::Invocable` object.
-template <typename Invocable, typename... Args>
-    requires std::is_invocable_v<Invocable, Args...>
+// FIXME [C++20] <concepts>
+template <typename I, typename... Args>
+concept Invocable = std::is_invocable_v<I, Args...>;
+
+template <typename Iter, typename Visitor>
+void for_each_safe(Iter first, const Iter last, Visitor v) noexcept {
+  while (first != last)
+    v(*first++);
+}
+
+// FIXME [C++20]: make this a proper range algorithm
+template <typename C, typename Visitor> requires requires(C c) {
+  { std::begin(c) };
+  { std::end(c) };
+}
+void for_each_safe(C &c, Visitor v) noexcept {
+  for_each_safe(std::begin(c), std::end(c), v);
+}
+
+/**
+ * @brief Stores a "compressible" pointer to a `std::Invocable` object.
+ *
+ * In the general case, this class wraps a pointer to a `std::Invocable`
+ * object. In the case where the invocable is also @ref Stateless, it provides
+ * a partial template specialization that is empty and points to a static
+ * inline instance of the invocable.
+ *
+ * The intention is to allow users to store an invocable by declaring a
+ * compressed_invocable_ref member. By further adding the [[no_unique_address]]
+ * attribute, the invocable will consume no storage when it is Stateless.
+ */
+template <typename I, typename... Args>
+    requires Invocable<I, Args...>
 class compressed_invocable_ref {
 public:
   compressed_invocable_ref() = delete;
@@ -73,7 +104,7 @@ public:
   constexpr compressed_invocable_ref(compressed_invocable_ref &&) = default;
   ~compressed_invocable_ref() = default;
 
-  constexpr compressed_invocable_ref(Invocable &i) noexcept
+  constexpr compressed_invocable_ref(I &i) noexcept
       : m_i{std::addressof(i)} {}
 
   constexpr compressed_invocable_ref &
@@ -84,25 +115,24 @@ public:
 
   // FIXME [C++20] contracts: assert that m_i not null
   constexpr decltype(auto) operator()(Args &&...args) const
-      noexcept(noexcept(std::invoke(std::declval<Invocable>(),
+      noexcept(noexcept(std::invoke(std::declval<I>(),
                                     std::declval<Args>()...))) {
     return (*m_i)(std::forward<Args>(args)...);
   }
 
-  constexpr Invocable &get_invocable() noexcept { return *m_i; }
+  constexpr I &get_invocable() noexcept { return *m_i; }
 
-  constexpr const Invocable &get_invocable() const noexcept { return *m_i; }
+  constexpr const I &get_invocable() const noexcept { return *m_i; }
 
 private:
-  Invocable *m_i;
+  I *m_i;
 };
 
-template <typename Invocable, typename... Args>
-    requires std::is_invocable_v<Invocable, Args...> &&
-             Stateless<Invocable>
-class compressed_invocable_ref<Invocable, Args...> {
+template <typename I, typename... Args>
+    requires Invocable<I, Args...> && Stateless<I>
+class compressed_invocable_ref<I, Args...> {
 public:
-  static inline Invocable I;
+  static inline I Instance;
 
   constexpr compressed_invocable_ref() = default;
   constexpr compressed_invocable_ref(const compressed_invocable_ref &) =
@@ -110,7 +140,7 @@ public:
   constexpr compressed_invocable_ref(compressed_invocable_ref &&) = default;
   ~compressed_invocable_ref() = default;
 
-  constexpr compressed_invocable_ref(Invocable &) noexcept {}
+  constexpr compressed_invocable_ref(I &) noexcept {}
 
   constexpr compressed_invocable_ref &
   operator=(const compressed_invocable_ref &) = default;
@@ -119,14 +149,14 @@ public:
   operator=(compressed_invocable_ref &&) = default;
 
   constexpr decltype(auto) operator()(Args &&...args) const
-      noexcept(noexcept(std::invoke(std::declval<Invocable>(),
+      noexcept(noexcept(std::invoke(std::declval<I>(),
                                     std::declval<Args>()...))) {
-    return std::invoke(I, std::forward<Args>(args)...);
+    return std::invoke(Instance, std::forward<Args>(args)...);
   }
 
-  constexpr Invocable &get_invocable() noexcept { return I; }
+  constexpr I &get_invocable() noexcept { return Instance; }
 
-  constexpr const Invocable &get_invocable() const noexcept { return I; }
+  constexpr const I &get_invocable() const noexcept { return Instance; }
 };
 
 // FIXME: like invocable_tagged_ref, but cannot directly reference an entry.
@@ -142,8 +172,7 @@ public:
       : m_address{reinterpret_cast<std::uintptr_t>(t)} {}
   ~invocable_item_ref() = default;
 
-  template <typename EntryAccess>
-      requires InvocableEntryAccessor<EntryType, EntryAccess, T>
+  template <InvocableEntryAccessor<EntryType, T> EntryAccess>
   EntryType *get_entry(EntryAccess &e) const noexcept {
     return std::addressof(std::invoke(e, *get_value()));
   }
@@ -176,8 +205,7 @@ public:
   using base_type::operator=;
   using base_type::operator bool;
 
-  template <typename EntryAccess>
-      requires InvocableEntryAccessor<EntryType, EntryAccess, T>
+  template <InvocableEntryAccessor<EntryType, T> EntryAccess>
   EntryType *get_entry(EntryAccess &e) const noexcept {
     return is_value()
         ? std::addressof(std::invoke(e, *get_value()))
@@ -316,8 +344,8 @@ struct entry_ref_codec<offset_entry_ref<AbstractEntryType<T, Args...>>,
   }
 };
 
-template <typename EntryType, typename T, typename EntryAccess>
-      requires InvocableEntryAccessor<EntryType, EntryAccess, T>
+template <typename EntryType, typename T,
+          InvocableEntryAccessor<EntryType, T> EntryAccess>
 struct entry_ref_codec<invocable_item_ref<EntryType, T>, EntryAccess> {
   using entry_ref_type = invocable_item_ref<EntryType, T>;
 
@@ -344,8 +372,8 @@ struct entry_ref_codec<invocable_item_ref<EntryType, T>, EntryAccess> {
   static T *get_value(entry_ref_type ref) noexcept { return ref.get_value(); }
 };
 
-template <typename EntryType, typename T, typename EntryAccess>
-      requires InvocableEntryAccessor<EntryType, EntryAccess, T>
+template <typename EntryType, typename T,
+          InvocableEntryAccessor<EntryType, T> EntryAccess>
 struct entry_ref_codec<invocable_tagged_ref<EntryType, T>, EntryAccess> {
   using entry_ref_type = invocable_tagged_ref<EntryType, T>;
 

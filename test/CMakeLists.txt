@@ -16,7 +16,7 @@ if (GIT_FOUND)
     catch
     PREFIX "${CMAKE_BINARY_DIR}/catch"
     GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-    GIT_TAG v2.5.0
+    GIT_TAG v2.6.0
     CMAKE_ARGS ${CATCH_CMAKE_ARGS}
     LOG_DOWNLOAD 1
     UPDATE_DISCONNECTED 1
@@ -24,14 +24,14 @@ if (GIT_FOUND)
 else()
   # We don't have git so we cannot clone catch; we make a dummy target and our
   # dependencies on it will do nothing. If catch2 is installed to a system
-  # path, then `#include <catch/catch.hpp>` will succeed in any case.
+  # path, then `#include <catch2/catch.hpp>` will succeed in any case.
   add_custom_target(catch)
 endif()
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 add_library(test_driver STATIC driver.cpp)
-set_property(TARGET test_driver PROPERTY CXX_STANDARD 17)
+set_property(TARGET test_driver PROPERTY CXX_STANDARD 20)
 
 target_include_directories(test_driver PRIVATE
     "${CMAKE_BINARY_DIR}/external/include")
@@ -39,7 +39,7 @@ target_include_directories(test_driver PRIVATE
 function(add_bds_test name)
   add_executable(${name} "${name}.cpp")
   set_property(TARGET ${name} PROPERTY FOLDER "bds_tests")
-  set_property(TARGET ${name} PROPERTY CXX_STANDARD 17)
+  set_property(TARGET ${name} PROPERTY CXX_STANDARD 20)
 
   # Ensure catch includes can be found, and link to bds
   target_include_directories(${name} PRIVATE

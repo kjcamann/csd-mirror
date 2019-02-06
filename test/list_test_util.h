@@ -140,8 +140,11 @@ private:
   }
 };
 
-template <bds::LinkedList T>
-concept bool TestProxy = requires {
+// FIXME [C++20]: T was originally declared `bds::LinkedList T` rather than
+// typename and then adding bds::LinkedList<T> as a requirement; gcc accepted
+// but clang does not. clang bug?
+template <typename T>
+concept TestProxy = bds::LinkedList<T> && requires {
   typename T::fwd_head_type;
   typename T::list_proxy_type;
 };
@@ -177,13 +180,14 @@ auto insert_front(ListType &L, std::initializer_list<typename ListType::pointer>
   return L.insert(L.begin(), i);
 }
 
+// FIXME [C++20] more bugs in clang implementation of P0634?
 template <bds::SListOrQueue ListType, typename S>
-auto insert_after(ListType &L, ListType::const_iterator i, S *s) noexcept {
+auto insert_after(ListType &L, typename ListType::const_iterator i, S *s) noexcept {
   return L.insert_after(i, s);
 }
 
 template <bds::TailQ ListType, typename S>
-auto insert_after(ListType &L, ListType::const_iterator i, S *s) noexcept {
+auto insert_after(ListType &L, typename ListType::const_iterator i, S *s) noexcept {
   return L.insert(std::next(i), s);
 }
 

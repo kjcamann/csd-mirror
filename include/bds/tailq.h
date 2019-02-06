@@ -31,7 +31,7 @@ struct tailq_entry {
   entry_ref_union<tailq_entry, T> prev;
 };
 
-template <typename T, typename EntryAccess>
+template <typename T, TailQEntryAccessor<T> EntryAccess>
 struct tailq_entry_ref_traits {
   using entry_ref_type = invocable_tagged_ref<tailq_entry<T>, T>;
   constexpr static auto EntryRefMember =
@@ -45,9 +45,8 @@ struct tailq_entry_ref_traits<T, offset_extractor<tailq_entry<T>, Offset>> {
       &entry_ref_union<tailq_entry<T>, T>::offset;
 };
 
-template <typename T, typename EntryAccess, CompressedSize SizeMember,
-          typename Derived>
-    requires TailQEntryAccessor<EntryAccess, T>
+template <typename T, TailQEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember, typename Derived>
 class tailq_base;
 
 template <typename T, CompressedSize SizeMember>
@@ -72,16 +71,15 @@ public:
   tailq_fwd_head &operator=(tailq_fwd_head &&) = delete;
 
 private:
-  template <typename, typename, typename, typename>
+  template <typename T2, TailQEntryAccessor<T2>, CompressedSize, typename>
   friend class tailq_base;
 
   tailq_entry<T> m_endEntry;
   [[no_unique_address]] SizeMember m_sz;
 };
 
-template <typename T, typename EntryAccess, CompressedSize SizeMember,
-          typename Derived>
-    requires TailQEntryAccessor<EntryAccess, T>
+template <typename T, TailQEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember, typename Derived>
 class tailq_base {
 public:
   using value_type = T;
@@ -324,14 +322,16 @@ public:
   void sort() noexcept { sort(std::less<T>{}); }
 
   template <typename Compare>
-  void sort(Compare) noexcept;
+  void sort(Compare comp) noexcept {
+    merge_sort(cbegin(), cend(), comp, std::size(*this));
+  }
 
 protected:
   template <CompressedSize S2, typename D2>
   void swap_lists(other_list_t<S2, D2> &other) noexcept;
 
 private:
-  template <typename, typename, typename, typename>
+  template <typename T2, TailQEntryAccessor<T2>, CompressedSize, typename>
   friend class tailq_base;
 
   constexpr static bool HasInlineSize = !std::is_same_v<SizeMember, no_size>;
@@ -380,7 +380,8 @@ private:
   [[no_unique_address]] mutable EntryAccess m_entryAccessor;
 };
 
-template <typename T, typename EntryAccess, typename SizeMember, typename Derived>
+template <typename T, TailQEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember, typename Derived>
 class tailq_base<T, EntryAccess, SizeMember, Derived>::iterator {
 public:
   using value_type = tailq_base::value_type;
@@ -453,7 +454,7 @@ public:
   }
 
 private:
-  template <typename, typename, typename, typename>
+  template <typename T2, TailQEntryAccessor<T2>, CompressedSize, typename>
   friend class tailq_base;
 
   friend tailq_base::const_iterator;
@@ -471,7 +472,8 @@ private:
   [[no_unique_address]] invocable_ref m_rEntryAccessor;
 };
 
-template <typename T, typename EntryAccess, typename SizeMember, typename Derived>
+template <typename T, TailQEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember, typename Derived>
 class tailq_base<T, EntryAccess, SizeMember, Derived>::const_iterator {
 public:
   using value_type = tailq_base::value_type;
@@ -546,7 +548,7 @@ public:
   }
 
 private:
-  template <typename, typename, typename, typename>
+  template <typename T2, TailQEntryAccessor<T2>, CompressedSize, typename>
   friend class tailq_base;
 
   friend tailq_base::iterator;
@@ -564,8 +566,8 @@ private:
   [[no_unique_address]] invocable_ref m_rEntryAccessor;
 };
 
-template <typename T, CompressedSize SizeMember, typename EntryAccess>
-    requires TailQEntryAccessor<entry_access_helper_t<T, EntryAccess>, T>
+template <typename T, CompressedSize SizeMember,
+          TailQEntryAccessor<T> EntryAccess>
 class tailq_proxy<tailq_fwd_head<T, SizeMember>, EntryAccess>
     : public tailq_base<T, entry_access_helper_t<T, EntryAccess>, SizeMember,
                         tailq_proxy<tailq_fwd_head<T, SizeMember>, EntryAccess>> {
@@ -575,8 +577,10 @@ class tailq_proxy<tailq_fwd_head<T, SizeMember>, EntryAccess>
 public:
   using fwd_head_type = tailq_fwd_head<T, SizeMember>;
 
+  // FIXME [C++20] P0634 not implemented correctly in clang? This error occurs
+  // in many other places.
   template <CompressedSize S, typename D>
-  using other_list_t = tailq_base<
+  using other_list_t = typename tailq_base<
       T, entry_access_type, SizeMember, tailq_proxy>::template other_list_t<S, D>;
 
   tailq_proxy() = delete;
@@ -645,7 +649,7 @@ public:
   }
 
 private:
-  template <typename, typename, typename, typename>
+  template <typename T2, TailQEntryAccessor<T2>, CompressedSize, typename>
   friend class tailq_base;
 
   fwd_head_type &getTailQData() noexcept { return m_head; }
@@ -655,8 +659,8 @@ private:
   fwd_head_type &m_head;
 };
 
-template <typename T, typename EntryAccess, CompressedSize SizeMember>
-    requires TailQEntryAccessor<entry_access_helper_t<T, EntryAccess>, T>
+template <typename T, TailQEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember>
 class tailq_head
     : private tailq_fwd_head<T, SizeMember>,
       public tailq_base<T, entry_access_helper_t<T, EntryAccess>, SizeMember,
@@ -666,11 +670,11 @@ class tailq_head
   using base_type = tailq_base<T, entry_access_type, SizeMember, tailq_head>;
 
 public:
-  using fwd_head_type::value_type;
-  using fwd_head_type::size_type;
+  using typename fwd_head_type::value_type;
+  using typename fwd_head_type::size_type;
 
   template <CompressedSize S, typename D>
-  using other_list_t = tailq_base<
+  using other_list_t = typename tailq_base<
       T, entry_access_type, SizeMember, tailq_head>::template other_list_t<S, D>;
 
   tailq_head() = default;
@@ -736,7 +740,7 @@ public:
   }
 
 private:
-  template <typename, typename, typename, typename>
+  template <typename T2, TailQEntryAccessor<T2>, CompressedSize, typename>
   friend class tailq_base;
 
   fwd_head_type &getTailQData() noexcept { return *this; }
@@ -744,7 +748,7 @@ private:
   const fwd_head_type &getTailQData() const noexcept { return *this; }
 };
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, TailQEntryAccessor<T> E, CompressedSize S, typename D>
 tailq_base<T, E, S, D>::size_type
 tailq_base<T, E, S, D>::size() const noexcept {
   if constexpr (HasInlineSize)
@@ -753,7 +757,7 @@ tailq_base<T, E, S, D>::size() const noexcept {
     return static_cast<size_type>(std::distance(begin(), end()));
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, TailQEntryAccessor<T> E, CompressedSize S, typename D>
 void tailq_base<T, E, S, D>::clear() noexcept {
   auto &endEntry = getTailQData().m_endEntry;
   endEntry.next.*EntryRefMember = &endEntry;
@@ -763,7 +767,7 @@ void tailq_base<T, E, S, D>::clear() noexcept {
     getTailQData().m_sz = 0;
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, TailQEntryAccessor<T> E, CompressedSize S, typename D>
 tailq_base<T, E, S, D>::iterator
 tailq_base<T, E, S, D>::insert(const_iterator pos, T *value) noexcept {
   entry_type *const posEntry = getEntry(pos);
@@ -783,7 +787,7 @@ tailq_base<T, E, S, D>::insert(const_iterator pos, T *value) noexcept {
   return {valueRef, m_entryAccessor};
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, TailQEntryAccessor<T> E, CompressedSize S, typename D>
 template <typename InputIt>
 tailq_base<T, E, S, D>::iterator
 tailq_base<T, E, S, D>::insert(const_iterator pos, InputIt first,
@@ -800,7 +804,7 @@ tailq_base<T, E, S, D>::insert(const_iterator pos, InputIt first,
   return firstInsert;
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, TailQEntryAccessor<T> E, CompressedSize S, typename D>
 tailq_base<T, E, S, D>::iterator
 tailq_base<T, E, S, D>::erase(const_iterator pos) noexcept {
   entry_type *const erasedEntry = getEntry(pos);
@@ -819,7 +823,7 @@ tailq_base<T, E, S, D>::erase(const_iterator pos) noexcept {
   return {erasedEntry->next.*EntryRefMember, m_entryAccessor};
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, TailQEntryAccessor<T> E, CompressedSize S, typename D>
 tailq_base<T, E, S, D>::iterator
 tailq_base<T, E, S, D>::erase(const_iterator first, const_iterator last) noexcept {
   if (first == last)
@@ -833,7 +837,7 @@ tailq_base<T, E, S, D>::erase(const_iterator first, const_iterator last) noexcep
   return {last.m_current, m_entryAccessor};
 }
 
-template <typename T, typename E, typename S1, typename D1>
+template <typename T, TailQEntryAccessor<T> E, CompressedSize S1, typename D1>
 template <CompressedSize S2, typename D2, typename Compare>
 void tailq_base<T, E, S1, D1>::merge(other_list_t<S2, D2> &other,
                                      Compare comp) noexcept {
@@ -883,7 +887,7 @@ void tailq_base<T, E, S1, D1>::merge(other_list_t<S2, D2> &other,
   }
 }
 
-template <typename T, typename E, typename S1, typename D1>
+template <typename T, TailQEntryAccessor<T> E, CompressedSize S1, typename D1>
 template <CompressedSize S2, typename D2>
 void tailq_base<T, E, S1, D1>::splice(const_iterator pos,
                                       other_list_t<S2, D2> &other) noexcept {
@@ -903,7 +907,7 @@ void tailq_base<T, E, S1, D1>::splice(const_iterator pos,
   insert_range(pos, first, last);
 }
 
-template <typename T, typename E, typename S1, typename D1>
+template <typename T, TailQEntryAccessor<T> E, CompressedSize S1, typename D1>
 template <CompressedSize S2, typename D2>
 void tailq_base<T, E, S1, D1>::splice(
     const_iterator pos, other_list_t<S2, D2> &other,
@@ -927,7 +931,7 @@ void tailq_base<T, E, S1, D1>::splice(
   insert_range(pos, first, last);
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, TailQEntryAccessor<T> E, CompressedSize S, typename D>
 template <typename UnaryPredicate>
 tailq_base<T, E, S, D>::size_type
 tailq_base<T, E, S, D>::remove_if(UnaryPredicate pred) noexcept {
@@ -962,7 +966,7 @@ tailq_base<T, E, S, D>::remove_if(UnaryPredicate pred) noexcept {
   return nRemoved;
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, TailQEntryAccessor<T> E, CompressedSize S, typename D>
 void tailq_base<T, E, S, D>::reverse() noexcept {
   entry_type *const endEntry = &getTailQData().m_endEntry;
   entry_type *curEntry = endEntry;
@@ -973,7 +977,7 @@ void tailq_base<T, E, S, D>::reverse() noexcept {
   } while (curEntry != endEntry);
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, TailQEntryAccessor<T> E, CompressedSize S, typename D>
 template <typename BinaryPredicate>
 void tailq_base<T, E, S, D>::unique(BinaryPredicate pred) noexcept {
   const const_iterator e = cend();
@@ -992,13 +996,7 @@ void tailq_base<T, E, S, D>::unique(BinaryPredicate pred) noexcept {
   }
 }
 
-template <typename T, typename E, typename S, typename D>
-template <typename Compare>
-void tailq_base<T, E, S, D>::sort(Compare comp) noexcept {
-  merge_sort(cbegin(), cend(), comp, std::size(*this));
-}
-
-template <typename T, typename E, typename S, typename D>
+template <typename T, TailQEntryAccessor<T> E, CompressedSize S, typename D>
 template <typename Compare, typename SizeType>
     requires std::is_integral_v<SizeType>
 tailq_base<T, E, S, D>::const_iterator
@@ -1084,7 +1082,7 @@ tailq_base<T, E, S, D>::merge_sort(const_iterator f1, const_iterator e2,
   return min;
 }
 
-template <typename T, typename E, typename S1, typename D1>
+template <typename T, TailQEntryAccessor<T> E, CompressedSize S1, typename D1>
 template <CompressedSize S2, typename D2>
 void tailq_base<T, E, S1, D1>::swap_lists(other_list_t<S2, D2> &other) noexcept {
   entry_type *const lhsEndEntry = &getTailQData().m_endEntry;
@@ -1105,7 +1103,7 @@ void tailq_base<T, E, S1, D1>::swap_lists(other_list_t<S2, D2> &other) noexcept 
   std::swap(getTailQData().m_sz, other.getTailQData().m_sz);
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, TailQEntryAccessor<T> E, CompressedSize S, typename D>
 template <typename QueueIt>
 void tailq_base<T, E, S, D>::insert_range(const_iterator pos, QueueIt first,
                                           QueueIt last) noexcept {
@@ -1124,7 +1122,7 @@ void tailq_base<T, E, S, D>::insert_range(const_iterator pos, QueueIt first,
   posEntry->prev = last.m_current;
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, TailQEntryAccessor<T> E, CompressedSize S, typename D>
 void tailq_base<T, E, S, D>::remove_range(const_iterator first,
                                           const_iterator last) noexcept {
   // Removes the closed range [first, last].

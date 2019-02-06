@@ -574,8 +574,9 @@ void find_predecessor_tests() {
   }
 }
 
+// FIXME [C++20]: P0634
 template <typename ProxyType>
-void proxy_test_helper(ProxyType head, ProxyType::value_type *e) {
+void proxy_test_helper(ProxyType head, typename ProxyType::value_type *e) {
   insert_front(head, e);
   REQUIRE( std::size(head) == 2 );
 }

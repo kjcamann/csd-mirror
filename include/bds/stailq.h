@@ -15,6 +15,7 @@
 #ifndef BDS_STAILQ_H
 #define BDS_STAILQ_H
 
+#include <cstddef>
 #include <functional>
 #include <initializer_list>
 #include <iterator>
@@ -33,7 +34,7 @@ struct stailq_entry {
   entry_ref_union<stailq_entry, T> next;
 };
 
-template <typename T, typename EntryAccess>
+template <typename T, STailQEntryAccessor<T> EntryAccess>
 struct stailq_entry_ref_traits {
   using entry_ref_type = invocable_tagged_ref<stailq_entry<T>, T>;
   constexpr static auto EntryRefMember =
@@ -47,9 +48,8 @@ struct stailq_entry_ref_traits<T, offset_extractor<stailq_entry<T>, Offset>> {
       &entry_ref_union<stailq_entry<T>, T>::offset;
 };
 
-template <typename T, typename EntryAccess, CompressedSize SizeMember,
-          typename Derived>
-    requires STailQEntryAccessor<EntryAccess, T>
+template <typename T, STailQEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember, typename Derived>
 class stailq_base;
 
 template <typename T, CompressedSize SizeMember>
@@ -80,16 +80,16 @@ public:
   }
 
 private:
-  template <typename, typename>
+  template <typename, CompressedSize>
   friend class stailq_fwd_head;
 
-  template <typename, typename, typename, typename>
+  template <typename T2, STailQEntryAccessor<T2>, CompressedSize, typename>
   friend class stailq_base;
 
-  template <typename, typename>
+  template <typename T2, STailQEntryAccessor<typename T2::value_type>>
   friend class stailq_proxy;
 
-  template <typename, typename, typename>
+  template <typename T2, STailQEntryAccessor<T2>, CompressedSize>
   friend class stailq_head;
 
   template <CompressedSize S2>
@@ -118,9 +118,8 @@ private:
   [[no_unique_address]] SizeMember m_sz;
 };
 
-template <typename T, typename EntryAccess, CompressedSize SizeMember,
-          typename Derived>
-    requires STailQEntryAccessor<EntryAccess, T>
+template <typename T, STailQEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember, typename Derived>
 class stailq_base {
 public:
   using value_type = T;
@@ -357,28 +356,21 @@ public:
   void sort(Compare) noexcept;
 
 private:
-  template <typename, typename, typename, typename>
+  template <typename T2, STailQEntryAccessor<T2>, CompressedSize, typename>
   friend class stailq_base;
 
-  template <typename, typename>
+  template <typename T2, STailQEntryAccessor<typename T2::value_type>>
   friend class stailq_proxy;
 
-  template <typename, typename, typename>
+  template <typename T2, STailQEntryAccessor<T2>, CompressedSize>
   friend class stailq_head;
 
-#if 0
-  template <SListOrQueue L, typename C, typename S>
+  template <typename L, typename C, typename S>
       requires std::is_integral_v<S>
   friend L::const_iterator
-      detail::forward_list_merge_sort(L::const_iterator,
-                                      L::const_iterator,
+      detail::forward_list_merge_sort(typename L::const_iterator,
+                                      typename L::const_iterator,
                                       C, S) noexcept;
-#endif
-
-  template <typename L, typename C, typename S>
-  friend L::const_iterator
-  detail::forward_list_merge_sort(L::const_iterator,
-                                  L::const_iterator, C, S) noexcept;
 
   constexpr static bool HasInlineSize = !std::is_same_v<SizeMember, no_size>;
 
@@ -423,7 +415,8 @@ private:
   [[no_unique_address]] mutable EntryAccess m_entryAccessor;
 };
 
-template <typename T, typename EntryAccess, typename SizeMember, typename Derived>
+template <typename T, STailQEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember, typename Derived>
 class stailq_base<T, EntryAccess, SizeMember, Derived>::iterator {
 public:
   using value_type = stailq_base::value_type;
@@ -434,13 +427,13 @@ public:
   using invocable_ref = compressed_invocable_ref<EntryAccess, T &>;
 
   iterator() noexcept : m_current{}, m_rEntryAccessor{} {}
-  iterator(const iterator &) noexcept = default;
-  iterator(iterator &&) noexcept = default;
+  iterator(const iterator &) = default;
+  iterator(iterator &&) = default;
 
-  iterator(nullptr_t) noexcept requires Stateless<EntryAccess>
+  iterator(std::nullptr_t) noexcept requires Stateless<EntryAccess>
       : m_current{nullptr}, m_rEntryAccessor{} {}
 
-  iterator(nullptr_t, EntryAccess &fn) noexcept
+  iterator(std::nullptr_t, EntryAccess &fn) noexcept
       : m_current{nullptr}, m_rEntryAccessor{fn} {}
 
   iterator(T *t) noexcept requires Stateless<EntryAccess>
@@ -449,11 +442,11 @@ public:
   iterator(T *t, EntryAccess &fn) noexcept
       : m_current{entry_ref_codec::create_entry_ref(t)}, m_rEntryAccessor{fn} {}
 
-  ~iterator() noexcept = default;
+  ~iterator() = default;
 
-  iterator &operator=(const iterator &) noexcept = default;
+  iterator &operator=(const iterator &) = default;
 
-  iterator &operator=(iterator &&) noexcept = default;
+  iterator &operator=(iterator &&) = default;
 
   reference operator*() const noexcept { return *operator->(); }
 
@@ -489,7 +482,7 @@ public:
   }
 
 private:
-  template <typename, typename, typename, typename>
+  template <typename T2, STailQEntryAccessor<T2>, CompressedSize, typename>
   friend class stailq_base;
 
   friend stailq_base::const_iterator;
@@ -503,7 +496,8 @@ private:
   [[no_unique_address]] invocable_ref m_rEntryAccessor;
 };
 
-template <typename T, typename EntryAccess, typename SizeMember, typename Derived>
+template <typename T, STailQEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember, typename Derived>
 class stailq_base<T, EntryAccess, SizeMember, Derived>::const_iterator {
 public:
   using value_type = stailq_base::value_type;
@@ -514,15 +508,15 @@ public:
   using invocable_ref = compressed_invocable_ref<EntryAccess, T &>;
 
   const_iterator() noexcept : m_current{}, m_rEntryAccessor{} {}
-  const_iterator(const const_iterator &) noexcept = default;
-  const_iterator(const_iterator &&) noexcept = default;
+  const_iterator(const const_iterator &) = default;
+  const_iterator(const_iterator &&) = default;
   const_iterator(const iterator &i) noexcept
       : m_current{i.m_current}, m_rEntryAccessor{i.m_rEntryAccessor} {}
 
-  const_iterator(nullptr_t) noexcept requires Stateless<EntryAccess>
+  const_iterator(std::nullptr_t) noexcept requires Stateless<EntryAccess>
       : m_current{nullptr}, m_rEntryAccessor{} {}
 
-  const_iterator(nullptr_t, EntryAccess &fn) noexcept
+  const_iterator(std::nullptr_t, EntryAccess &fn) noexcept
       : m_current{nullptr}, m_rEntryAccessor{fn} {}
 
   const_iterator(const T *t) noexcept requires Stateless<EntryAccess>
@@ -531,11 +525,11 @@ public:
   const_iterator(const T *t, EntryAccess &fn) noexcept
       : m_current{entry_ref_codec::create_entry_ref(t)}, m_rEntryAccessor{fn} {}
 
-  ~const_iterator() noexcept = default;
+  ~const_iterator() = default;
 
-  const_iterator &operator=(const const_iterator &) noexcept = default;
+  const_iterator &operator=(const const_iterator &) = default;
 
-  const_iterator &operator=(const_iterator &&) noexcept = default;
+  const_iterator &operator=(const_iterator &&) = default;
 
   reference operator*() const noexcept { return *operator->(); }
 
@@ -571,7 +565,7 @@ public:
   }
 
 private:
-  template <typename, typename, typename, typename>
+  template <typename T2, STailQEntryAccessor<T2>, CompressedSize, typename>
   friend class stailq_base;
 
   friend stailq_base::iterator;
@@ -585,8 +579,8 @@ private:
   [[no_unique_address]] invocable_ref m_rEntryAccessor;
 };
 
-template <typename T, CompressedSize SizeMember, typename EntryAccess>
-    requires STailQEntryAccessor<entry_access_helper_t<T, EntryAccess>, T>
+template <typename T, CompressedSize SizeMember,
+          STailQEntryAccessor<T> EntryAccess>
 class stailq_proxy<stailq_fwd_head<T, SizeMember>, EntryAccess>
     : public stailq_base<T, entry_access_helper_t<T, EntryAccess>, SizeMember,
                          stailq_proxy<stailq_fwd_head<T, SizeMember>, EntryAccess>> {
@@ -596,8 +590,9 @@ class stailq_proxy<stailq_fwd_head<T, SizeMember>, EntryAccess>
 public:
   using fwd_head_type = stailq_fwd_head<T, SizeMember>;
 
+  // FIXME [C++20]: P0634
   template <CompressedSize S, typename D>
-  using other_list_t = stailq_base<
+  using other_list_t = typename stailq_base<
       T, entry_access_type, SizeMember, stailq_proxy>::template other_list_t<S, D>;
 
   stailq_proxy() = delete;
@@ -628,7 +623,7 @@ public:
       noexcept(std::is_nothrow_move_constructible_v<entry_access_type>)
       : base_type{std::move(other)}, m_head{h} {
     constexpr bool computeOtherSize = base_type::HasInlineSize &&
-        !other.HasInlineSize;
+        !other_list_t<S, D>::HasInlineSize;
     const std::size_t otherSize = computeOtherSize ? std::size(other) : 0;
     m_head.move_from(std::move(other.getSTailQData()), otherSize);
   }
@@ -663,7 +658,7 @@ public:
       noexcept(std::is_nothrow_move_assignable_v<entry_access_type>) {
     base_type::operator=(std::move(rhs));
     constexpr bool computeRhsSize = base_type::HasInlineSize &&
-        !rhs.HasInlineSize;
+        !other_list_t<S, D>::HasInlineSize;
     const std::size_t rhsSize = computeRhsSize ? std::size(rhs) : 0;
     m_head.move_from(std::move(rhs.getSTailQData()), rhsSize);
     return *this;
@@ -675,7 +670,7 @@ public:
   }
 
 private:
-  template <typename, typename, typename, typename>
+  template <typename T2, STailQEntryAccessor<T2>, CompressedSize, typename>
   friend class stailq_base;
 
   fwd_head_type &getSTailQData() noexcept { return m_head; }
@@ -685,8 +680,8 @@ private:
   fwd_head_type &m_head;
 };
 
-template <typename T, typename EntryAccess, CompressedSize SizeMember>
-    requires STailQEntryAccessor<entry_access_helper_t<T, EntryAccess>, T>
+template <typename T, STailQEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember>
 class stailq_head
     : private stailq_fwd_head<T, SizeMember>,
       public stailq_base<T, entry_access_helper_t<T, EntryAccess>, SizeMember,
@@ -696,11 +691,13 @@ class stailq_head
   using base_type = stailq_base<T, entry_access_type, SizeMember, stailq_head>;
 
 public:
-  using fwd_head_type::value_type;
-  using fwd_head_type::size_type;
+  // FIXME [C++20]: P0634?
+  using typename fwd_head_type::value_type;
+  using typename fwd_head_type::size_type;
 
+  // FIXME [C++20]: P0634
   template <CompressedSize S, typename D>
-  using other_list_t = stailq_base<
+  using other_list_t = typename stailq_base<
       T, entry_access_type, SizeMember, stailq_head>::template other_list_t<S, D>;
 
   stailq_head() = default;
@@ -769,7 +766,7 @@ public:
   }
 
 private:
-  template <typename, typename, typename, typename>
+  template <typename T2, STailQEntryAccessor<T2>, CompressedSize, typename>
   friend class stailq_base;
 
   fwd_head_type &getSTailQData() noexcept { return *this; }
@@ -777,7 +774,7 @@ private:
   const fwd_head_type &getSTailQData() const noexcept { return *this; }
 };
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
 stailq_base<T, E, S, D>::size_type
 stailq_base<T, E, S, D>::size() const noexcept {
   if constexpr (HasInlineSize)
@@ -786,7 +783,7 @@ stailq_base<T, E, S, D>::size() const noexcept {
     return static_cast<size_type>(std::distance(begin(), end()));
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
 void stailq_base<T, E, S, D>::clear() noexcept {
   auto &data = getSTailQData();
   data.m_headEntry.next = data.m_encodedTail = entry_ref_type{nullptr};
@@ -795,7 +792,7 @@ void stailq_base<T, E, S, D>::clear() noexcept {
     data.m_sz = 0;
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
 stailq_base<T, E, S, D>::iterator
 stailq_base<T, E, S, D>::insert_after(const_iterator pos, T *value) noexcept {
   BDS_ASSERT(pos != end(), "end() iterator passed to insert_after");
@@ -817,7 +814,7 @@ stailq_base<T, E, S, D>::insert_after(const_iterator pos, T *value) noexcept {
   return {valueRef, m_entryAccessor};
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
 template <typename InputIt>
 stailq_base<T, E, S, D>::iterator
 stailq_base<T, E, S, D>::insert_after(const_iterator pos, InputIt first,
@@ -828,7 +825,7 @@ stailq_base<T, E, S, D>::insert_after(const_iterator pos, InputIt first,
   return {pos.m_current, m_entryAccessor};
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
 stailq_base<T, E, S, D>::iterator
 stailq_base<T, E, S, D>::erase_after(const_iterator pos) noexcept {
   BDS_ASSERT(pos != end(), "end() iterator passed to erase_after");
@@ -859,7 +856,7 @@ stailq_base<T, E, S, D>::erase_after(const_iterator pos) noexcept {
   return {nextRef, m_entryAccessor};
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
 stailq_base<T, E, S, D>::iterator
 stailq_base<T, E, S, D>::erase_after(const_iterator first,
                                      const_iterator last) noexcept {
@@ -885,7 +882,7 @@ stailq_base<T, E, S, D>::erase_after(const_iterator first,
   return {last.m_current, m_entryAccessor};
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
 stailq_base<T, E, S, D>::iterator
 stailq_base<T, E, S, D>::find_predecessor(const_iterator pos) const noexcept {
   const_iterator scan = cbefore_begin();
@@ -899,7 +896,7 @@ stailq_base<T, E, S, D>::find_predecessor(const_iterator pos) const noexcept {
   return {end.m_current, m_entryAccessor};
 }
 
-template <typename T, typename E, typename S1, typename D1>
+template <typename T, STailQEntryAccessor<T> E, CompressedSize S1, typename D1>
 template <CompressedSize S2, typename D2, typename Compare>
 void stailq_base<T, E, S1, D1>::merge(other_list_t<S2, D2> &other,
                                       Compare comp) noexcept {
@@ -949,7 +946,7 @@ void stailq_base<T, E, S1, D1>::merge(other_list_t<S2, D2> &other,
   other.clear();
 }
 
-template <typename T, typename E, typename S1, typename D1>
+template <typename T, STailQEntryAccessor<T> E, CompressedSize S1, typename D1>
 template <CompressedSize S2, typename D2>
 void stailq_base<T, E, S1, D1>::splice_after(const_iterator pos,
                                              other_list_t<S2, D2> &other) noexcept {
@@ -973,7 +970,7 @@ void stailq_base<T, E, S1, D1>::splice_after(const_iterator pos,
   other.clear();
 }
 
-template <typename T, typename E, typename S1, typename D1>
+template <typename T, STailQEntryAccessor<T> E, CompressedSize S1, typename D1>
 template <CompressedSize S2, typename D2>
 void stailq_base<T, E, S1, D1>::splice_after(
     const_iterator pos, other_list_t<S2, D2> &other,
@@ -1023,7 +1020,7 @@ void stailq_base<T, E, S1, D1>::splice_after(
   }
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
 template <typename UnaryPredicate>
 stailq_base<T, E, S, D>::size_type
 stailq_base<T, E, S, D>::remove_if(UnaryPredicate pred) noexcept {
@@ -1057,7 +1054,7 @@ stailq_base<T, E, S, D>::remove_if(UnaryPredicate pred) noexcept {
   return nRemoved;
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
 void stailq_base<T, E, S, D>::reverse() noexcept {
   const const_iterator end = cend();
   const_iterator i = cbegin();
@@ -1075,7 +1072,7 @@ void stailq_base<T, E, S, D>::reverse() noexcept {
   getSTailQData().m_headEntry.next = prev.m_current;
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
 template <typename BinaryPredicate>
 void stailq_base<T, E, S, D>::unique(BinaryPredicate pred) noexcept {
   if (empty())
@@ -1104,7 +1101,7 @@ void stailq_base<T, E, S, D>::unique(BinaryPredicate pred) noexcept {
   }
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
 template <typename Compare>
 void stailq_base<T, E, S, D>::sort(Compare comp) noexcept {
   const auto pEnd = detail::forward_list_merge_sort<stailq_base<T, E, S, D>>(
@@ -1112,7 +1109,7 @@ void stailq_base<T, E, S, D>::sort(Compare comp) noexcept {
   getSTailQData().m_encodedTail = pEnd.m_current;
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
 template <typename QueueIt>
 stailq_base<T, E, S, D>::iterator
 stailq_base<T, E, S, D>::insert_range_after(const_iterator pos, QueueIt first,

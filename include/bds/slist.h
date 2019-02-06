@@ -15,6 +15,7 @@
 #ifndef BDS_SLIST_H
 #define BDS_SLIST_H
 
+#include <cstddef>
 #include <functional>
 #include <initializer_list>
 #include <iterator>
@@ -33,7 +34,7 @@ struct slist_entry {
   entry_ref_union<slist_entry, T> next;
 };
 
-template <typename T, typename EntryAccess>
+template <typename T, SListEntryAccessor<T> EntryAccess>
 struct slist_entry_ref_traits {
   using entry_ref_type = invocable_tagged_ref<slist_entry<T>, T>;
   constexpr static auto EntryRefMember =
@@ -47,9 +48,8 @@ struct slist_entry_ref_traits<T, offset_extractor<slist_entry<T>, Offset>> {
       &entry_ref_union<slist_entry<T>, T>::offset;
 };
 
-template <typename T, typename EntryAccess, CompressedSize SizeMember,
-          typename Derived>
-    requires SListEntryAccessor<EntryAccess, T>
+template <typename T, SListEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember, typename Derived>
 class slist_base;
 
 template <typename T, CompressedSize SizeMember>
@@ -77,16 +77,16 @@ public:
   }
 
 private:
-  template <typename, typename>
+  template <typename, CompressedSize>
   friend class slist_fwd_head;
 
-  template <typename, typename, typename, typename>
+  template <typename T2, SListEntryAccessor<T2>, CompressedSize, typename>
   friend class slist_base;
 
-  template <typename, typename>
+  template <typename T2, SListEntryAccessor<typename T2::value_type>>
   friend class slist_proxy;
 
-  template <typename, typename, typename>
+  template <typename T2, SListEntryAccessor<T2>, CompressedSize>
   friend class slist_head;
 
   template <CompressedSize S2>
@@ -115,9 +115,8 @@ private:
   [[no_unique_address]] SizeMember m_sz;
 };
 
-template <typename T, typename EntryAccess, CompressedSize SizeMember,
-          typename Derived>
-    requires SListEntryAccessor<EntryAccess, T>
+template <typename T, SListEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember, typename Derived>
 class slist_base {
 public:
   using value_type = T;
@@ -339,28 +338,21 @@ public:
   void sort(Compare) noexcept;
 
 private:
-  template <typename, typename, typename, typename>
+  template <typename T2, SListEntryAccessor<T2>, CompressedSize, typename>
   friend class slist_base;
 
-  template <typename, typename>
+  template <typename T2, SListEntryAccessor<typename T2::value_type>>
   friend class slist_proxy;
 
-  template <typename, typename, typename>
+  template <typename T2, SListEntryAccessor<T2>, CompressedSize>
   friend class slist_head;
 
-#if 0
-  template <SListOrQueue L, typename C, typename S>
+  template <typename L, typename C, typename S>
       requires std::is_integral_v<S>
   friend L::const_iterator
-      detail::forward_list_merge_sort(L::const_iterator,
-                                      L::const_iterator,
+      detail::forward_list_merge_sort(typename L::const_iterator,
+                                      typename L::const_iterator,
                                       C, S) noexcept;
-#endif
-
-  template <typename L, typename C, typename S>
-  friend L::const_iterator
-  detail::forward_list_merge_sort(L::const_iterator,
-                                  L::const_iterator, C, S) noexcept;
 
   constexpr static bool HasInlineSize = !std::is_same_v<SizeMember, no_size>;
 
@@ -405,7 +397,8 @@ private:
   [[no_unique_address]] mutable EntryAccess m_entryAccessor;
 };
 
-template <typename T, typename EntryAccess, typename SizeMember, typename Derived>
+template <typename T, SListEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember, typename Derived>
 class slist_base<T, EntryAccess, SizeMember, Derived>::iterator {
 public:
   using value_type = slist_base::value_type;
@@ -416,13 +409,13 @@ public:
   using invocable_ref = compressed_invocable_ref<EntryAccess, T &>;
 
   iterator() noexcept : m_current{}, m_rEntryAccessor{} {}
-  iterator(const iterator &) noexcept = default;
-  iterator(iterator &&) noexcept = default;
+  iterator(const iterator &) = default;
+  iterator(iterator &&) = default;
 
-  iterator(nullptr_t) noexcept requires Stateless<EntryAccess>
+  iterator(std::nullptr_t) noexcept requires Stateless<EntryAccess>
       : m_current{nullptr}, m_rEntryAccessor{} {}
 
-  iterator(nullptr_t, EntryAccess &fn) noexcept
+  iterator(std::nullptr_t, EntryAccess &fn) noexcept
       : m_current{nullptr}, m_rEntryAccessor{fn} {}
 
   iterator(T *t) noexcept requires Stateless<EntryAccess>
@@ -431,10 +424,10 @@ public:
   iterator(T *t, EntryAccess &fn) noexcept
       : m_current{entry_ref_codec::create_entry_ref(t)}, m_rEntryAccessor{fn} {}
 
-  ~iterator() noexcept = default;
+  ~iterator() = default;
 
-  iterator &operator=(const iterator &) noexcept = default;
-  iterator &operator=(iterator &&) noexcept = default;
+  iterator &operator=(const iterator &) = default;
+  iterator &operator=(iterator &&) = default;
 
   reference operator*() const noexcept { return *operator->(); }
 
@@ -470,7 +463,7 @@ public:
   }
 
 private:
-  template <typename, typename, typename, typename>
+  template <typename T2, SListEntryAccessor<T2>, CompressedSize, typename>
   friend class slist_base;
 
   friend slist_base::const_iterator;
@@ -484,7 +477,8 @@ private:
   [[no_unique_address]] invocable_ref m_rEntryAccessor;
 };
 
-template <typename T, typename EntryAccess, typename SizeMember, typename Derived>
+template <typename T, SListEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember, typename Derived>
 class slist_base<T, EntryAccess, SizeMember, Derived>::const_iterator {
 public:
   using value_type = slist_base::value_type;
@@ -495,15 +489,15 @@ public:
   using invocable_ref = compressed_invocable_ref<EntryAccess, T &>;
 
   const_iterator() noexcept : m_current{}, m_rEntryAccessor{} {}
-  const_iterator(const const_iterator &) noexcept = default;
-  const_iterator(const_iterator &&) noexcept = default;
+  const_iterator(const const_iterator &) = default;
+  const_iterator(const_iterator &&) = default;
   const_iterator(const iterator &i) noexcept
       : m_current{i.m_current}, m_rEntryAccessor{i.m_rEntryAccessor} {}
 
-  const_iterator(nullptr_t) noexcept requires Stateless<EntryAccess>
+  const_iterator(std::nullptr_t) noexcept requires Stateless<EntryAccess>
       : m_current{nullptr}, m_rEntryAccessor{} {}
 
-  const_iterator(nullptr_t, EntryAccess &fn) noexcept
+  const_iterator(std::nullptr_t, EntryAccess &fn) noexcept
       : m_current{nullptr}, m_rEntryAccessor{fn} {}
 
   const_iterator(const T *t) noexcept requires Stateless<EntryAccess>
@@ -512,11 +506,11 @@ public:
   const_iterator(const T *t, EntryAccess &fn) noexcept
       : m_current{entry_ref_codec::create_entry_ref(t)}, m_rEntryAccessor{fn} {}
 
-  ~const_iterator() noexcept = default;
+  ~const_iterator() = default;
 
-  const_iterator &operator=(const const_iterator &) noexcept = default;
+  const_iterator &operator=(const const_iterator &) = default;
 
-  const_iterator &operator=(const_iterator &&) noexcept = default;
+  const_iterator &operator=(const_iterator &&) = default;
 
   reference operator*() const noexcept { return *operator->(); }
 
@@ -552,7 +546,7 @@ public:
   }
 
 private:
-  template <typename, typename, typename, typename>
+  template <typename T2, SListEntryAccessor<T2>, CompressedSize, typename>
   friend class slist_base;
 
   friend slist_base::iterator;
@@ -566,8 +560,8 @@ private:
   [[no_unique_address]] invocable_ref m_rEntryAccessor;
 };
 
-template <typename T, CompressedSize SizeMember, typename EntryAccess>
-    requires SListEntryAccessor<entry_access_helper_t<T, EntryAccess>, T>
+template <typename T, CompressedSize SizeMember,
+          SListEntryAccessor<T> EntryAccess>
 class slist_proxy<slist_fwd_head<T, SizeMember>, EntryAccess>
     : public slist_base<T, entry_access_helper_t<T, EntryAccess>, SizeMember,
                         slist_proxy<slist_fwd_head<T, SizeMember>, EntryAccess>> {
@@ -577,8 +571,9 @@ class slist_proxy<slist_fwd_head<T, SizeMember>, EntryAccess>
 public:
   using fwd_head_type = slist_fwd_head<T, SizeMember>;
 
+  // FIXME [C++20]: P0634
   template <CompressedSize S, typename D>
-  using other_list_t = slist_base<
+  using other_list_t = typename slist_base<
       T, entry_access_type, SizeMember, slist_proxy>::template other_list_t<S, D>;
 
   slist_proxy() = delete;
@@ -609,7 +604,7 @@ public:
       noexcept(std::is_nothrow_move_constructible_v<entry_access_type>)
       : base_type{std::move(other)}, m_head{h} {
     constexpr bool computeOtherSize = base_type::HasInlineSize &&
-        !other.HasInlineSize;
+        !other_list_t<S, D>::HasInlineSize;
     const std::size_t otherSize = computeOtherSize ? std::size(other) : 0;
     m_head.move_from(std::move(other.getSListData()), otherSize);
   }
@@ -634,19 +629,19 @@ public:
 
   slist_proxy &operator=(slist_proxy &&rhs)
       noexcept(std::is_nothrow_move_assignable_v<entry_access_type>) {
+    m_head = std::move(rhs.getSListData());
     base_type::operator=(std::move(rhs));
-    constexpr bool computeRhsSize = base_type::HasInlineSize &&
-        !rhs.HasInlineSize;
-    const std::size_t rhsSize = computeRhsSize ? std::size(rhs) : 0;
-    m_head.move_from(std::move(rhs.getSListData()), rhsSize);
     return *this;
   }
 
   template <CompressedSize S, typename D>
   slist_proxy &operator=(other_list_t<S, D> &&rhs)
       noexcept(std::is_nothrow_move_assignable_v<entry_access_type>) {
-    m_head = std::move(rhs.getSListData());
     base_type::operator=(std::move(rhs));
+    constexpr bool computeRhsSize = base_type::HasInlineSize &&
+        !other_list_t<S, D>::HasInlineSize;
+    const std::size_t rhsSize = computeRhsSize ? std::size(rhs) : 0;
+    m_head.move_from(std::move(rhs.getSListData()), rhsSize);
     return *this;
   }
 
@@ -656,7 +651,7 @@ public:
   }
 
 private:
-  template <typename, typename, typename, typename>
+  template <typename T2, SListEntryAccessor<T2>, CompressedSize, typename>
   friend class slist_base;
 
   fwd_head_type &getSListData() noexcept { return m_head; }
@@ -666,8 +661,8 @@ private:
   fwd_head_type &m_head;
 };
 
-template <typename T, typename EntryAccess, CompressedSize SizeMember>
-    requires SListEntryAccessor<entry_access_helper_t<T, EntryAccess>, T>
+template <typename T, SListEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember>
 class slist_head
     : private slist_fwd_head<T, SizeMember>,
       public slist_base<T, entry_access_helper_t<T, EntryAccess>, SizeMember,
@@ -677,11 +672,11 @@ class slist_head
   using base_type = slist_base<T, entry_access_type, SizeMember, slist_head>;
 
 public:
-  using fwd_head_type::value_type;
-  using fwd_head_type::size_type;
+  using typename fwd_head_type::value_type;
+  using typename fwd_head_type::size_type;
 
   template <CompressedSize S, typename D>
-  using other_list_t = slist_base<
+  using other_list_t = typename slist_base<
       T, entry_access_type, SizeMember, slist_head>::template other_list_t<S, D>;
 
   slist_head() = default;
@@ -750,7 +745,7 @@ public:
   }
 
 private:
-  template <typename, typename, typename, typename>
+  template <typename T2, SListEntryAccessor<T2>, CompressedSize, typename>
   friend class slist_base;
 
   fwd_head_type &getSListData() noexcept { return *this; }
@@ -758,7 +753,7 @@ private:
   const fwd_head_type &getSListData() const noexcept { return *this; }
 };
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, SListEntryAccessor<T> E, CompressedSize S, typename D>
 slist_base<T, E, S, D>::size_type
 slist_base<T, E, S, D>::size() const noexcept {
   if constexpr (HasInlineSize)
@@ -767,7 +762,7 @@ slist_base<T, E, S, D>::size() const noexcept {
     return static_cast<size_type>(std::distance(begin(), end()));
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, SListEntryAccessor<T> E, CompressedSize S, typename D>
 void slist_base<T, E, S, D>::clear() noexcept {
   auto &data = getSListData();
   data.m_headEntry.next = entry_ref_type{nullptr};
@@ -776,7 +771,7 @@ void slist_base<T, E, S, D>::clear() noexcept {
     data.m_sz = 0;
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, SListEntryAccessor<T> E, CompressedSize S, typename D>
 slist_base<T, E, S, D>::iterator
 slist_base<T, E, S, D>::insert_after(const_iterator pos, T *value) noexcept {
   BDS_ASSERT(pos != end(), "end() iterator passed to insert_after");
@@ -795,7 +790,7 @@ slist_base<T, E, S, D>::insert_after(const_iterator pos, T *value) noexcept {
   return {valueRef, m_entryAccessor};
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, SListEntryAccessor<T> E, CompressedSize S, typename D>
 template <typename InputIt>
 slist_base<T, E, S, D>::iterator
 slist_base<T, E, S, D>::insert_after(const_iterator pos, InputIt first,
@@ -806,7 +801,7 @@ slist_base<T, E, S, D>::insert_after(const_iterator pos, InputIt first,
   return {pos.m_current, m_entryAccessor};
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, SListEntryAccessor<T> E, CompressedSize S, typename D>
 slist_base<T, E, S, D>::iterator
 slist_base<T, E, S, D>::erase_after(const_iterator pos) noexcept {
   BDS_ASSERT(pos != end(), "end() iterator passed to erase_after");
@@ -827,7 +822,7 @@ slist_base<T, E, S, D>::erase_after(const_iterator pos) noexcept {
   return {nextRef, m_entryAccessor};
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, SListEntryAccessor<T> E, CompressedSize S, typename D>
 slist_base<T, E, S, D>::iterator
 slist_base<T, E, S, D>::erase_after(const_iterator first,
                                     const_iterator last) noexcept {
@@ -845,7 +840,7 @@ slist_base<T, E, S, D>::erase_after(const_iterator first,
   return {last.m_current, m_entryAccessor};
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, SListEntryAccessor<T> E, CompressedSize S, typename D>
 slist_base<T, E, S, D>::iterator
 slist_base<T, E, S, D>::find_predecessor(const_iterator pos) const noexcept {
   const_iterator scan = cbefore_begin();
@@ -859,7 +854,7 @@ slist_base<T, E, S, D>::find_predecessor(const_iterator pos) const noexcept {
   return {end.m_current, m_entryAccessor};
 }
 
-template <typename T, typename E, typename S1, typename D1>
+template <typename T, SListEntryAccessor<T> E, CompressedSize S1, typename D1>
 template <CompressedSize S2, typename D2, typename Compare>
 void slist_base<T, E, S1, D1>::merge(other_list_t<S2, D2> &other,
                                      Compare comp) noexcept {
@@ -904,7 +899,7 @@ void slist_base<T, E, S1, D1>::merge(other_list_t<S2, D2> &other,
   other.clear();
 }
 
-template <typename T, typename E, typename S1, typename D1>
+template <typename T, SListEntryAccessor<T> E, CompressedSize S1, typename D1>
 template <CompressedSize S2, typename D2>
 void slist_base<T, E, S1, D1>::splice_after(const_iterator pos,
                                             other_list_t<S2, D2> &other) noexcept {
@@ -921,7 +916,7 @@ void slist_base<T, E, S1, D1>::splice_after(const_iterator pos,
   other.clear();
 }
 
-template <typename T, typename E, typename S1, typename D1>
+template <typename T, SListEntryAccessor<T> E, CompressedSize S1, typename D1>
 template <CompressedSize S2, typename D2>
 void slist_base<T, E, S1, D1>::splice_after(
     const_iterator pos, other_list_t<S2, D2> &other,
@@ -962,7 +957,7 @@ void slist_base<T, E, S1, D1>::splice_after(
   insert_range_after(pos, first, lastInsert);
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, SListEntryAccessor<T> E, CompressedSize S, typename D>
 template <typename UnaryPredicate>
 slist_base<T, E, S, D>::size_type
 slist_base<T, E, S, D>::remove_if(UnaryPredicate pred) noexcept {
@@ -996,7 +991,7 @@ slist_base<T, E, S, D>::remove_if(UnaryPredicate pred) noexcept {
   return nRemoved;
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, SListEntryAccessor<T> E, CompressedSize S, typename D>
 void slist_base<T, E, S, D>::reverse() noexcept {
   const const_iterator end = cend();
   const_iterator i = cbegin();
@@ -1012,7 +1007,7 @@ void slist_base<T, E, S, D>::reverse() noexcept {
   getSListData().m_headEntry.next = prev.m_current;
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, SListEntryAccessor<T> E, CompressedSize S, typename D>
 template <typename BinaryPredicate>
 void slist_base<T, E, S, D>::unique(BinaryPredicate pred) noexcept {
   if (empty())
@@ -1041,14 +1036,14 @@ void slist_base<T, E, S, D>::unique(BinaryPredicate pred) noexcept {
   }
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, SListEntryAccessor<T> E, CompressedSize S, typename D>
 template <typename Compare>
 void slist_base<T, E, S, D>::sort(Compare comp) noexcept {
   detail::forward_list_merge_sort<slist_base<T, E, S, D>>(cbefore_begin(), cend(),
                                                           comp, std::size(*this));
 }
 
-template <typename T, typename E, typename S, typename D>
+template <typename T, SListEntryAccessor<T> E, CompressedSize S, typename D>
 template <typename QueueIt>
 slist_base<T, E, S, D>::iterator
 slist_base<T, E, S, D>::insert_range_after(const_iterator pos, QueueIt first,

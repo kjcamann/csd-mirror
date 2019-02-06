@@ -49,21 +49,20 @@ template <typename T, CompressedSize SizeMember = no_size>
 struct slist_fwd_head;
 
 template <typename EntryAccess, typename T>
-concept bool SListEntryAccessor =
-    InvocableEntryAccessor<slist_entry<T>, EntryAccess, T>;
+concept SListEntryAccessor = requires(entry_access_helper_t<T, EntryAccess> e, T t) {
+  { std::invoke(e, t) } -> slist_entry<T> &;
+};
 
-template <typename T, typename EntryAccess, CompressedSize SizeMember = no_size>
-    requires SListEntryAccessor<entry_access_helper_t<T, EntryAccess>, T>
+template <typename T, SListEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember = no_size>
 class slist_head;
 
-template <typename FwdHead, typename EntryAccess>
-    requires SListEntryAccessor<
-        entry_access_helper_t<typename FwdHead::value_type, EntryAccess>,
-        typename FwdHead::value_type>
+template <typename FwdHead,
+          SListEntryAccessor<typename FwdHead::value_type> EntryAccess>
 class slist_proxy;
 
 template <typename ListType>
-concept bool SList = util::DerivedFromTemplate<ListType, slist_head> ||
+concept SList = util::DerivedFromTemplate<ListType, slist_head> ||
     util::DerivedFromTemplate<ListType, slist_proxy>;
 
 #define BDS_SLIST_HEAD_OFFSET_T(TYPE, MEMBER, ...) \
@@ -103,21 +102,20 @@ template <typename T, CompressedSize SizeMember = no_size>
 struct stailq_fwd_head;
 
 template <typename EntryAccess, typename T>
-concept bool STailQEntryAccessor =
-    InvocableEntryAccessor<stailq_entry<T>, EntryAccess, T>;
+concept STailQEntryAccessor = requires(entry_access_helper_t<T, EntryAccess> e, T t) {
+  { std::invoke(e, t) } -> stailq_entry<T> &;
+};
 
-template <typename T, typename EntryAccess, CompressedSize SizeMember = no_size>
-    requires STailQEntryAccessor<entry_access_helper_t<T, EntryAccess>, T>
+template <typename T, STailQEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember = no_size>
 class stailq_head;
 
-template <typename FwdHead, typename EntryAccess>
-    requires STailQEntryAccessor<
-        entry_access_helper_t<typename FwdHead::value_type, EntryAccess>,
-        typename FwdHead::value_type>
+template <typename FwdHead,
+          STailQEntryAccessor<typename FwdHead::value_type>>
 class stailq_proxy;
 
 template <typename ListType>
-concept bool STailQ = util::DerivedFromTemplate<ListType, stailq_head> ||
+concept STailQ = util::DerivedFromTemplate<ListType, stailq_head> ||
     util::DerivedFromTemplate<ListType, stailq_proxy>;
 
 #define BDS_STAILQ_HEAD_OFFSET_T(TYPE, MEMBER, ...) \
@@ -157,21 +155,20 @@ template <typename T, CompressedSize SizeMember = no_size>
 struct tailq_fwd_head;
 
 template <typename EntryAccess, typename T>
-concept bool TailQEntryAccessor =
-    InvocableEntryAccessor<tailq_entry<T>, EntryAccess, T>;
+concept TailQEntryAccessor = requires(entry_access_helper_t<T, EntryAccess> e, T t) {
+  { std::invoke(e, t) } -> tailq_entry<T> &;
+};
 
-template <typename T, typename EntryAccess, CompressedSize SizeMember = no_size>
-    requires TailQEntryAccessor<entry_access_helper_t<T, EntryAccess>, T>
+template <typename T, TailQEntryAccessor<T> EntryAccess,
+          CompressedSize SizeMember = no_size>
 class tailq_head;
 
-template <typename FwdHead, typename EntryAccess>
-    requires TailQEntryAccessor<
-        entry_access_helper_t<typename FwdHead::value_type, EntryAccess>,
-        typename FwdHead::value_type>
+template <typename FwdHead,
+          TailQEntryAccessor<typename FwdHead::value_type> EntryAccess>
 class tailq_proxy;
 
 template <typename ListType>
-concept bool TailQ = util::DerivedFromTemplate<ListType, tailq_head> ||
+concept TailQ = util::DerivedFromTemplate<ListType, tailq_head> ||
     util::DerivedFromTemplate<ListType, tailq_proxy>;
 
 #define BDS_TAILQ_HEAD_OFFSET_T(TYPE, MEMBER, ...) \
@@ -202,72 +199,56 @@ using list_entry BDS_DEPRECATE_LIST_ATTR = tailq_entry<T>;
 template <std::size_t Offset>
 using list_entry_offset BDS_DEPRECATE_LIST_ATTR = tailq_entry_offset<Offset>;
 
+// FIXME [C++20] can attributes appear here? This was allowed in gcc but not
+// clang
 template <typename ListType>
-concept bool List BDS_DEPRECATE_LIST_ATTR = TailQ<ListType>;
+concept List /*BDS_DEPRECATE_LIST_ATTR*/ = TailQ<ListType>;
 
 /*
  * Concepts / helper functions used for multiple list types
  */
 
 template <typename T>
-concept bool LinkedListEntry =
+concept LinkedListEntry =
     util::InstantiatedFrom<T, slist_entry> ||
     util::InstantiatedFrom<T, stailq_entry> ||
     util::InstantiatedFrom<T, tailq_entry>;
 
 template <typename ListType>
-concept bool SListOrQueue = SList<ListType> || STailQ<ListType>;
+concept SListOrQueue = SList<ListType> || STailQ<ListType>;
 
 template <typename ListType>
-concept bool LinkedList =
+concept LinkedList =
     SList<ListType> || STailQ<ListType> || TailQ<ListType> || List<ListType>;
 
-template <typename Iter, typename Visitor>
-void for_each_safe(Iter first, const Iter last, Visitor v) noexcept {
-  while (first != last)
-    v(*first++);
-}
-
-template <bds::LinkedList C, typename Visitor>
-void for_each_safe(C &c, Visitor v) noexcept {
-  for_each_safe(std::begin(c), std::end(c), v);
-}
-
-template <bds::LinkedList C, typename T>
+template <LinkedList C, typename T>
 C::size_type erase(C &c, const T &value) noexcept {
   return c.remove(value);
 }
 
-template <bds::LinkedList C, typename UnaryPredicate>
+template <LinkedList C, typename UnaryPredicate>
 C::size_type erase_if(C &c, UnaryPredicate pred) noexcept {
   return c.remove_if(pred);
 }
 
 namespace detail {
 
-// FIXME [C++20]: for the moment we remove the constrained function declaration
-// of detail::forward_list_merge_sort because (due to a bug?) we cannot make it
-// a friend of stailq_base and slist_base (the friend declaration is considered
-// a new declaration).
-#if 0
-template <SListOrQueue ListType, typename Compare, typename SizeType>
+// FIXME [C++20]: is typename required even after P0634? gcc and clang
+// implementations disagree.
+// FIXME: we want to constrain ListType to be SListOrQueue, but this is
+// defined in terms of inheritance from classes like slist_head or
+// slist_proxy, but not slist_base (and this function is only called
+// internally by list base class) so the constraint fails.
+template <typename ListType, typename Compare, typename SizeType>
     // With <concepts>, last param should be `std::Integral SizeType``, also
     // need a <concepts> constraint on Compare. Any changes also need to made
     // in the friend declarations in stailq and slist.
-    requires std::is_integral_v<SizeMember>
+    requires std::is_integral_v<SizeType>
 ListType::const_iterator
-forward_list_merge_sort(ListType::const_iterator p1,
-                        ListType::const_iterator e2,
+forward_list_merge_sort(typename ListType::const_iterator p1,
+                        typename ListType::const_iterator e2,
                         Compare comp,
                         SizeType n) noexcept {
-#endif
-
-template <typename ListType, typename Compare, typename SizeType>
-ListType::const_iterator
-forward_list_merge_sort(ListType::const_iterator p1,
-                        ListType::const_iterator e2, Compare comp,
-                        SizeType n) noexcept {
-
   // In-place merge sort for slist and stailq; those classes cannot reuse
   // their `merge` member function because that merges two different lists,
   // leaving the second list empty. Here, the merge operation is "in place"

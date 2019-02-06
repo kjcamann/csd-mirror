@@ -13,11 +13,15 @@ set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 target_include_directories(bds INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 
+# FIXME: this is not recognized yet and CMake does not allow us to set
+# CXX_STANDARD on interface libraries. It doesn't matter here because we'll
+# set CXX_STANDARD on the test executables anyway but ideally we would only
+# set it here.
 target_compile_features(bds INTERFACE cxx_std_20)
 
-# FIXME: this flag only works for gcc for now, but concepts will probably be
+# FIXME: this flag only works for clang for now, but concepts will probably be
 # listed in cmake-compile-featues(7) in a future list.
-target_compile_options(bds INTERFACE -fconcepts)
+target_compile_options(bds INTERFACE -Xclang -fconcepts-ts)
 
 option(BUILD_BDS_TESTS "Build unit test executables" ON)
 option(BUILD_BDS_DOCS "Build doxygen/sphinx documentation" OFF)

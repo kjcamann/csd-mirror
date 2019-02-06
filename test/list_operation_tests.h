@@ -140,7 +140,7 @@ void remove_tests() {
     REQUIRE( std::addressof(*head.before_end()) == &e[4] );
 
   // Also test uniform container erasure
-  erase_if(head, [] (const E &item) { return (item.i) & 0x1 == 1; });
+  erase_if(head, [] (const E &item) { return (item.i & 0x1) == 1; });
   REQUIRE( std::size(head) == 0 );
 }
 
