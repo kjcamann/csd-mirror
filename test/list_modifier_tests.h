@@ -23,6 +23,8 @@ void basic_tests() {
   REQUIRE( std::size(head) == 0 );
   REQUIRE( head.empty() );
   REQUIRE( head.begin() == head.end() );
+  if constexpr (bds::STailQ<ListType>)
+    REQUIRE( head.before_begin() == head.before_end() );
 
   // Perform first insertion, and check its effects
   auto it1 = insert_front(head, &e[0]);
@@ -142,7 +144,7 @@ void basic_tests() {
   REQUIRE( head.begin() == head.end() );
   REQUIRE( after_it2 == head.end() );
   if constexpr (bds::STailQ<ListType>)
-    REQUIRE( head.before_end() == head.end() );
+    REQUIRE( head.before_begin() == head.before_end() );
 
   // Perform a final insertion to check that the list is still usable after
   // being returned to an empty state.
@@ -176,7 +178,7 @@ void clear_tests() {
   REQUIRE( head.begin() == head.end() );
   REQUIRE( std::size(head) == 0 );
   if constexpr (bds::STailQ<ListType>)
-    REQUIRE( head.before_end() == head.end() );
+    REQUIRE( head.before_begin() == head.before_end() );
 
   // Ensure that the list is still in a working state (items can be
   // successfully added) even after being cleared.
@@ -263,7 +265,7 @@ void move_assign_tests() {
   REQUIRE( oldHead.empty() );
   REQUIRE( oldHead.begin() == oldHead.end() );
   if constexpr (bds::STailQ<ListType1>)
-    REQUIRE( oldHead.before_end() == oldHead.end() );
+    REQUIRE( oldHead.before_begin() == oldHead.before_end() );
   if constexpr (is_base_u<E>) {
     REQUIRE( oldHead.get_entry_accessor().movedFrom == true );
     REQUIRE( newHead.get_entry_accessor().movedFrom == false );
@@ -553,11 +555,43 @@ void find_predecessor_tests() {
 
   head.insert_after(head.before_begin(), { &e[0], &e[1] });
 
-  SECTION("predecessor") {
+  SECTION("find_predecessor") {
     REQUIRE( head.find_predecessor(head.before_begin()) == head.end() );
     REQUIRE( head.find_predecessor(head.iter(&e[0])) == head.before_begin() );
     REQUIRE( head.find_predecessor(head.iter(&e[1])) == head.iter(&e[0]) );
     REQUIRE( head.find_predecessor(head.end()) == head.iter(&e[1]) );
+  }
+
+  SECTION("find_predecessor_if") {
+    typename ListType::iterator i;
+    bool found;
+
+    std::tie(i, found) = head.find_predecessor_if(
+      [&e] (const E &item) { return &item == &e[0]; });
+    REQUIRE( i == head.before_begin() );
+    REQUIRE( found == true );
+
+    std::tie(i, found) = head.find_predecessor_if(
+      [&e] (const E &item) { return &item == &e[1]; });
+    REQUIRE( i == head.begin() );
+    REQUIRE( found == true );
+
+    std::tie(i, found) = head.find_predecessor_if(
+      [&e] (const E &item) { return std::addressof(item) == nullptr; });
+    REQUIRE( i == ++head.begin() );
+    REQUIRE( found == false );
+    if constexpr (bds::STailQ<ListType>)
+      REQUIRE( i == head.before_end() );
+
+    head.clear();
+
+    std::tie(i, found) = head.find_predecessor_if(
+      [&e] (const E &item) { return std::addressof(item) == nullptr; });
+
+    REQUIRE( i == head.before_begin() );
+    REQUIRE( found == false );
+    if constexpr (bds::STailQ<ListType>)
+      REQUIRE( i == head.before_end() );
   }
 
   SECTION("find_erase") {

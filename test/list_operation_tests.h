@@ -59,6 +59,23 @@ void merge_tests() {
     REQUIRE( isSizeOk );
   }
 
+  SECTION("empty") {
+    // Check that merge of two empty lists is a no-op; the reason for this
+    // test is to ensure that an stailq's before_end() iterator remains equal
+    // to that stailq's own before_begin().
+    ListHeadType head1;
+    ListHeadType head2;
+
+    head1.merge(head2, comp);
+
+    REQUIRE( head1.empty() );
+    REQUIRE( head2.empty() );
+    if constexpr (bds::STailQ<ListHeadType>) {
+      REQUIRE( head1.before_begin() == head1.before_end() );
+      REQUIRE( head2.before_begin() == head2.before_end() );
+    }
+  }
+
   SECTION("random") {
     std::random_device trueRandom;
     std::default_random_engine engine{trueRandom()};
@@ -87,14 +104,18 @@ void merge_tests() {
       if constexpr (bds::STailQ<ListHeadType>) {
 	// Ensure that before_end() is properly maintained by the merge for
 	// singly-linked tail queues.
-        auto last = std::max_element(std::cbegin(lhs), std::cend(lhs), comp);
+	if (std::empty(lhs))
+          beforeEndOk = lhs.before_begin() == lhs.before_end();
+	else {
+          auto last = std::max_element(std::cbegin(lhs), std::cend(lhs), comp);
 
-        if (last != std::cend(lhs)) {
-          while (std::next(last) != std::cend(lhs) && equal(*last, *std::next(last)))
-            ++last;
+          if (last != std::cend(lhs)) {
+            while (std::next(last) != std::cend(lhs) && equal(*last, *std::next(last)))
+              ++last;
+          }
+
+          beforeEndOk = last == lhs.cbefore_end();
         }
-
-        beforeEndOk = last == lhs.cbefore_end();
       }
 
       const bool testPassed = rhsIsEmpty && lhsSizeFnOk && lhsSorted && lhsSizeOk

@@ -266,7 +266,25 @@ public:
     std::swap(m_entryAccessor, other.m_entryAccessor);
   }
 
-  [[nodiscard]] iterator find_predecessor(const_iterator pos) const noexcept;
+  [[nodiscard]] iterator find_predecessor(const_iterator_t pos) const noexcept {
+    return find_predecessor(before_begin(), end(), pos);
+  }
+
+  [[nodiscard]] iterator find_predecessor(const_iterator first,
+                                          const_iterator last,
+                                          const_iterator pos) const noexcept;
+
+  // FIXME: noexcept based on UnaryPredicate
+  template <typename UnaryPredicate>
+  [[nodiscard]] std::pair<iterator, bool>
+      find_predecessor_if(UnaryPredicate p) const noexcept {
+    return find_predecessor_if(before_begin(), end(), p);
+  }
+
+  template <typename UnaryPredicate>
+  [[nodisard]] std::pair<iterator, bool>
+      find_predecessor_if(const_iterator first, const_iterator last,
+                          UnaryPredicate) const noexcept;
 
   template <CompressedSize S2, typename D2>
   void merge(other_list_t<S2, D2> &other) noexcept {
@@ -842,16 +860,35 @@ slist_base<T, E, S, D>::erase_after(const_iterator first,
 
 template <typename T, SListEntryAccessor<T> E, CompressedSize S, typename D>
 slist_base<T, E, S, D>::iterator
-slist_base<T, E, S, D>::find_predecessor(const_iterator pos) const noexcept {
-  const_iterator scan = cbefore_begin();
-  const const_iterator end = cend();
-
-  while (scan != end) {
+slist_base<T, E, S, D>::find_predecessor(const_iterator scan,
+                                         const_iterator last,
+                                         const_iterator pos) const noexcept {
+  while (scan != last) {
     if (auto prev = scan++; scan == pos)
       return {prev.m_current, m_entryAccessor};
   }
 
-  return {end.m_current, m_entryAccessor};
+  return {nullptr, m_entryAccessor};
+}
+
+template <typename T, SListEntryAccessor<T> E, CompressedSize S, typename D>
+template <typename UnaryPredicate>
+std::pair<typename slist_base<T, E, S, D>::iterator, bool>
+slist_base<T, E, S, D>::find_predecessor_if(const_iterator prev,
+                                            const_iterator last,
+                                            UnaryPredicate pred) const noexcept {
+  if (prev == last)
+    return {iterator{nullptr, m_entryAccessor}, false};
+
+  const_iterator scan = std::next(prev);
+
+  while (scan != last) {
+    if (pred(*scan))
+      return {iterator{prev.m_current, m_entryAccessor}, true};
+    prev = scan++;
+  }
+
+  return {iterator{prev.m_current, m_entryAccessor}, false};
 }
 
 template <typename T, SListEntryAccessor<T> E, CompressedSize S1, typename D1>

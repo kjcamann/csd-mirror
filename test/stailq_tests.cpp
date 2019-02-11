@@ -112,18 +112,18 @@ TEST_CASE("stailq.bulk_erase", "[stailq]") {
   // Remove (before_begin, end) and check that the list is empty.
   i = head.erase_after(head.before_begin(), head.end());
   REQUIRE( i == head.end() );
-  REQUIRE( head.before_end() == head.end() );
+  REQUIRE( head.before_begin() == head.before_end() );
   REQUIRE( head.empty() );
 
   // Remove the empty range (begin, end) -- this is a no-op, so it must leave
   // the list in a valid state.
   i = head.erase_after(head.begin(), head.end());
   REQUIRE( i == head.end() );
-  REQUIRE( head.before_end() == head.end() );
+  REQUIRE( head.before_begin() == head.before_end() );
   REQUIRE( head.empty() );
   i = head.erase_after(head.before_begin(), head.end());
   REQUIRE( i == head.end() );
-  REQUIRE( head.before_end() == head.end() );
+  REQUIRE( head.before_begin() == head.before_end() );
   REQUIRE( head.empty() );
 
   // Check that list is still usable after empty range erase.
@@ -161,7 +161,7 @@ TEST_CASE("stailq.push_pop", "[stailq]") {
 
   head.pop_front();
   REQUIRE( head.empty() );
-  REQUIRE( head.before_end() == head.end() );
+  REQUIRE( head.before_begin() == head.before_end() );
 }
 
 TEST_CASE("stailq.swap", "[stailq]") {

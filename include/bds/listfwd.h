@@ -1,4 +1,4 @@
-//==-- bds/listfwd.h - Utilities for queue(3)-style lists -------*- C++ -*-==//
+//==-- bds/listfwd.h - Forward decl. for queue(3)-style lists ---*- C++ -*-==//
 //
 //                     BSD Data Structures (BDS) Library
 //
@@ -9,11 +9,11 @@
 /**
  * @file
  * @brief Contains forward declarations, free functions, and implementation
- *     utilies for the slist, stailq, and tailq classes.
+ *     utilities for the slist, stailq, and tailq classes.
  */
 
-#ifndef BDS_LIST_COMMON_H
-#define BDS_LIST_COMMON_H
+#ifndef BDS_LISTFWD_H
+#define BDS_LISTFWD_H
 
 #include <cstddef>
 #include <cstdint>

@@ -60,14 +60,25 @@ public:
                                        std::size_t, SizeMember>;
 
   stailq_fwd_head() noexcept : m_headEntry{}, m_sz{} {
-    m_encodedTail.offset = nullptr;
+    m_encodedTail.offset = &m_headEntry;
   }
 
   stailq_fwd_head(const stailq_fwd_head &) = delete;
 
   stailq_fwd_head(stailq_fwd_head &&other) noexcept : stailq_fwd_head{} {
     std::swap(m_headEntry, other.m_headEntry);
-    std::swap(m_encodedTail, other.m_encodedTail);
+    const auto oldEncodedTail = m_encodedTail;
+
+    if (m_headEntry.next.offset == nullptr)
+      m_encodedTail.offset = &m_headEntry;
+    else
+      m_encodedTail = other.m_encodedTail;
+
+    if (other.m_headEntry.next.offset == nullptr)
+      other.m_encodedTail.offset = &other.m_headEntry;
+    else
+      other.m_encodedTail = oldEncodedTail;
+
     std::swap(m_sz, other.m_sz);
   }
 
@@ -100,8 +111,13 @@ private:
   template <CompressedSize S2>
   void move_from(stailq_fwd_head<T, S2> &&other, std::size_t size) noexcept {
     std::swap(*new(&m_headEntry) stailq_entry<T>{}, other.m_headEntry);
-    m_encodedTail.offset = nullptr;
-    std::swap(m_encodedTail, other.m_encodedTail);
+
+    if (m_headEntry.next.offset == nullptr)
+      m_encodedTail.offset = &m_headEntry;
+    else
+      m_encodedTail = other.m_encodedTail;
+
+    other.m_encodedTail.offset = &other.m_headEntry;
 
     if constexpr (std::is_integral_v<S2>) {
       if constexpr (std::is_integral_v<SizeMember>)
@@ -284,7 +300,25 @@ public:
     std::swap(m_entryAccessor, other.m_entryAccessor);
   }
 
-  [[nodiscard]] iterator find_predecessor(const_iterator pos) const noexcept;
+  [[nodiscard]] iterator find_predecessor(const_iterator_t pos) const noexcept {
+    return find_predecessor(before_begin(), end(), pos);
+  }
+
+  [[nodiscard]] iterator find_predecessor(const_iterator first,
+                                          const_iterator last,
+                                          const_iterator pos) const noexcept;
+
+  // FIXME: noexcept based on UnaryPredicate
+  template <typename UnaryPredicate>
+  [[nodiscard]] std::pair<iterator, bool>
+      find_predecessor_if(UnaryPredicate p) const noexcept {
+    return find_predecessor_if(before_begin(), end(), p);
+  }
+
+  template <typename UnaryPredicate>
+  [[nodiscard]] std::pair<iterator, bool>
+      find_predecessor_if(const_iterator first, const_iterator last,
+                          UnaryPredicate) const noexcept;
 
   template <CompressedSize S2, typename D2>
   void merge(other_list_t<S2, D2> &other) noexcept {
@@ -786,7 +820,8 @@ stailq_base<T, E, S, D>::size() const noexcept {
 template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
 void stailq_base<T, E, S, D>::clear() noexcept {
   auto &data = getSTailQData();
-  data.m_headEntry.next = data.m_encodedTail = entry_ref_type{nullptr};
+  data.m_headEntry.next = entry_ref_type{nullptr};
+  data.m_encodedTail = entry_ref_type{&data.m_headEntry};
 
   if constexpr (HasInlineSize)
     data.m_sz = 0;
@@ -846,11 +881,8 @@ stailq_base<T, E, S, D>::erase_after(const_iterator pos) noexcept {
   posEntry->next = nextRef;
 
   if (!nextRef) {
-    // removedEntry was the tail element so now posEntry becomes the tail,
-    // unless the list is empty.
-    auto &data = getSTailQData();
-    const bool isEmpty = pos.m_current == entry_ref_type{&data.m_headEntry};
-    data.m_encodedTail = isEmpty ? entry_ref_type{nullptr} : pos.m_current;
+    // removedEntry was the tail element so now posEntry becomes the tail.
+    getSTailQData().m_encodedTail = pos.m_current;
   }
 
   return {nextRef, m_entryAccessor};
@@ -870,10 +902,8 @@ stailq_base<T, E, S, D>::erase_after(const_iterator first,
 
   if (!last.m_current) {
     // last is end(), so first is the new tail element, unless first is
-    // before_begin() -- in that case the tail element will be end().
-    getSTailQData().m_encodedTail = (first == cbefore_begin())
-        ? nullptr
-        : first.m_current;
+    // before_begin() -- in that case the tail element will be before_begin().
+    getSTailQData().m_encodedTail = first.m_current;
   }
 
   if constexpr (HasInlineSize)
@@ -884,16 +914,38 @@ stailq_base<T, E, S, D>::erase_after(const_iterator first,
 
 template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
 stailq_base<T, E, S, D>::iterator
-stailq_base<T, E, S, D>::find_predecessor(const_iterator pos) const noexcept {
-  const_iterator scan = cbefore_begin();
-  const const_iterator end = cend();
-
-  while (scan != end) {
+stailq_base<T, E, S, D>::find_predecessor(const_iterator scan,
+                                          const_iterator last,
+                                          const_iterator pos) const noexcept {
+  while (scan != last) {
     if (auto prev = scan++; scan == pos)
       return {prev.m_current, m_entryAccessor};
   }
 
-  return {end.m_current, m_entryAccessor};
+  return {nullptr, m_entryAccessor};
+}
+
+template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
+template <typename UnaryPredicate>
+std::pair<typename stailq_base<T, E, S, D>::iterator, bool>
+stailq_base<T, E, S, D>::find_predecessor_if(const_iterator prev,
+                                             const_iterator last,
+                                             UnaryPredicate pred) const noexcept {
+  if (prev == last)
+    return {iterator{nullptr, m_entryAccessor}, false};
+
+  // This algorithm has a more complex structure than the iterator-based
+  // find_predecessor because when the list is empty the previous is equal to
+  // `before_begin` , the next is `end`, but neither is safe to dereference.
+  const_iterator scan = std::next(prev);
+
+  while (scan != last) {
+    if (pred(*scan))
+      return {iterator{prev.m_current, m_entryAccessor}, true};
+    prev = scan++;
+  }
+
+  return {iterator{prev.m_current, m_entryAccessor}, false};
 }
 
 template <typename T, STailQEntryAccessor<T> E, CompressedSize S1, typename D1>
@@ -959,6 +1011,8 @@ void stailq_base<T, E, S1, D1>::splice_after(const_iterator pos,
 
   if (!(posEntry->next.*EntryRefMember)) {
     // pos is the tail entry; new tail entry will come from the other list.
+    // We can ignore the `before_begin() == before_end()` corner case because
+    // we've already returned in the case where the other list is empty.
     getSTailQData().m_encodedTail = other.getSTailQData().m_encodedTail;
   }
 
