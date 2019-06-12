@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# BDS Sphinx documentation configuration file.
+# CSD Sphinx documentation configuration file.
 #
 # This file does only contain a selection of the most common options. For a
 # full list see the documentation:
@@ -27,8 +27,8 @@ author = 'Kenneth Camann'
 # The short X.Y version
 version = '@PROJECT_VERSION@'
 # The full version, including alpha/beta/rc tags
-if '@BDS_RELEASE_TAG_SUFFIX@':
-    release = version + '-@BDS_RELEASE_TAG_SUFFIX@'
+if '@CSD_RELEASE_TAG_SUFFIX@':
+    release = version + '-@CSD_RELEASE_TAG_SUFFIX@'
 else:
     release = version
 
@@ -46,10 +46,10 @@ extensions = [
 ]
 
 breathe_projects = {
-    'bds' : '../doxygen/xml'
+    'csd' : '../doxygen/xml'
 }
 
-breathe_default_project = 'bds'
+breathe_default_project = 'csd'
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -86,7 +86,7 @@ pygments_style = 'sphinx'
 #
 html_theme = 'sphinx_rtd_theme'
 
-html_logo = '_static/bds-logo.png'
+html_logo = '_static/csd-logo.png'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -115,7 +115,7 @@ html_static_path = ['_static']
 # -- Options for HTMLHelp output ---------------------------------------------
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'BDSdoc'
+htmlhelp_basename = 'CSDdoc'
 
 
 # -- Options for LaTeX output ------------------------------------------------
@@ -142,7 +142,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'BDS.tex', 'BDS Documentation',
+    (master_doc, 'CSD.tex', 'CSD Documentation',
      'Kenneth Camann', 'manual'),
 ]
 
@@ -152,7 +152,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'bds', 'BDS Documentation',
+    (master_doc, 'csd', 'CSD Documentation',
      [author], 1)
 ]
 
@@ -163,7 +163,7 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'BDS', 'BDS Documentation',
-     author, 'BDS', 'One line description of project.',
+    (master_doc, 'CSD', 'CSD Documentation',
+     author, 'CSD', 'One line description of project.',
      'Miscellaneous'),
 ]

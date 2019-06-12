@@ -3,25 +3,25 @@
 #include <type_traits>
 
 #include <catch2/catch.hpp>
-#include <bds/slist.h>
+#include <csd/slist.h>
 
 #include "list_modifier_tests.h"
 #include "list_operation_tests.h"
 
-using namespace bds;
+using namespace csd;
 
 using S = BaseS<slist_entry>;
 using T = BaseT<slist_entry>;
 using U = BaseU<slist_entry>;
 
-using sl_head_t = BDS_SLIST_HEAD_OFFSET_T(S, next);
-using sl_head_inline_t = BDS_SLIST_HEAD_OFFSET_T(S, next, std::size_t);
+using sl_head_t = CSD_SLIST_HEAD_OFFSET_T(S, next);
+using sl_head_inline_t = CSD_SLIST_HEAD_OFFSET_T(S, next, std::size_t);
 using sl_head_invoke_t = slist_head_cinvoke_t<&T::next>;
 using sl_head_stateful_t = slist_head<U, U::accessor_type>;
 
 using sl_fwd_head_t = slist_fwd_head<S>;
-using sl_proxy_t = BDS_SLIST_PROXY_OFFSET_T(S, next);
-using sl_proxy_inline_t = BDS_SLIST_PROXY_OFFSET_T(S, next, std::size_t);
+using sl_proxy_t = CSD_SLIST_PROXY_OFFSET_T(S, next);
+using sl_proxy_inline_t = CSD_SLIST_PROXY_OFFSET_T(S, next, std::size_t);
 using sl_proxy_stateful_t = slist_proxy<slist_fwd_head<U>, U::accessor_type>;
 using sl_test_proxy_t = list_test_proxy<sl_proxy_t>;
 using sl_test_proxy_inline_t = list_test_proxy<sl_proxy_inline_t>;

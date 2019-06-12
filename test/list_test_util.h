@@ -1,5 +1,5 @@
-#ifndef BDS_LIST_TEST_UTIL_H
-#define BDS_LIST_TEST_UTIL_H
+#ifndef CSD_LIST_TEST_UTIL_H
+#define CSD_LIST_TEST_UTIL_H
 
 #include <cstddef>
 #include <cstdint>
@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include <bds/listfwd.h>
+#include <csd/listfwd.h>
 
 template <template <typename> class LinkEntryType>
 struct BaseS {
@@ -102,7 +102,7 @@ public:
   list_test_proxy(list_test_proxy &&other) noexcept
       : ListProxyType{ctorFwdHead(), std::move(other)} {}
 
-  template <bds::CompressedSize S, typename D>
+  template <csd::CompressedSize S, typename D>
   list_test_proxy(typename ListProxyType::template other_list_t<S, D> &&other) noexcept
       : ListProxyType{ctorFwdHead(), std::move(other)} {}
 
@@ -140,61 +140,61 @@ private:
   }
 };
 
-// FIXME [C++20]: T was originally declared `bds::LinkedList T` rather than
-// typename and then adding bds::LinkedList<T> as a requirement; gcc accepted
+// FIXME [C++20]: T was originally declared `csd::LinkedList T` rather than
+// typename and then adding csd::LinkedList<T> as a requirement; gcc accepted
 // but clang does not. clang bug?
 template <typename T>
-concept TestProxy = bds::LinkedList<T> && requires {
+concept TestProxy = csd::LinkedList<T> && requires {
   typename T::fwd_head_type;
   typename T::list_proxy_type;
 };
 
 // FIXME [docs]: explain why we can't use push_front here
-template <bds::SListOrQueue ListType, typename S>
+template <csd::SListOrQueue ListType, typename S>
 auto insert_front(ListType &L, S *s) noexcept {
   return L.insert_after(L.before_begin(), s);
 }
 
-template <bds::SListOrQueue ListType, typename InputIt>
+template <csd::SListOrQueue ListType, typename InputIt>
 auto insert_front(ListType &L, InputIt begin, InputIt end) noexcept {
   return L.insert_after(L.before_begin(), begin, end);
 }
 
-template <bds::SListOrQueue ListType>
+template <csd::SListOrQueue ListType>
 auto insert_front(ListType &L, std::initializer_list<typename ListType::pointer> i) noexcept {
   return L.insert_after(L.before_begin(), i);
 }
 
-template <bds::TailQ ListType, typename S>
+template <csd::TailQ ListType, typename S>
 auto insert_front(ListType &L, S *s) noexcept {
   return L.insert(L.begin(), s);
 }
 
-template <bds::TailQ ListType, typename InputIt>
+template <csd::TailQ ListType, typename InputIt>
 auto insert_front(ListType &L, InputIt begin, InputIt end) noexcept {
   return L.insert(L.begin(), begin, end);
 }
 
-template <bds::TailQ ListType>
+template <csd::TailQ ListType>
 auto insert_front(ListType &L, std::initializer_list<typename ListType::pointer> i) noexcept {
   return L.insert(L.begin(), i);
 }
 
 // FIXME [C++20] more bugs in clang implementation of P0634?
-template <bds::SListOrQueue ListType, typename S>
+template <csd::SListOrQueue ListType, typename S>
 auto insert_after(ListType &L, typename ListType::const_iterator i, S *s) noexcept {
   return L.insert_after(i, s);
 }
 
-template <bds::TailQ ListType, typename S>
+template <csd::TailQ ListType, typename S>
 auto insert_after(ListType &L, typename ListType::const_iterator i, S *s) noexcept {
   return L.insert(std::next(i), s);
 }
 
-template <bds::SListOrQueue ListType>
+template <csd::SListOrQueue ListType>
 auto erase_front(ListType &L) { return L.erase_after(L.before_begin()); }
 
-template <bds::TailQ ListType>
+template <csd::TailQ ListType>
 auto erase_front(ListType &L) { return L.erase(L.begin()); }
 
 // Generate a random sequence of std::int64_t values of the given size and
@@ -259,7 +259,7 @@ populateSortedList(ListType &list, std::size_t size, std::int64_t min,
 
 template <typename ListType>
 void destroyList(ListType &list) noexcept {
-  bds::for_each_safe(list, [](auto &v) { delete std::addressof(v); });
+  csd::for_each_safe(list, [](auto &v) { delete std::addressof(v); });
 }
 
 // <algorithm> offers `std::is_sorted` to check if elements are sorted, but

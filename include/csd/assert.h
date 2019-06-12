@@ -1,6 +1,6 @@
-//==-- bds/assert.h - Assert macros used in libbds --------------*- C++ -*-==//
+//==-- csd/assert.h - Assert macros used in libcsd --------------*- C++ -*-==//
 //
-//                     BSD Data Structures (BDS) Library
+//                Cyril Software Data Structures (CSD) Library
 //
 // This file is distributed under the 2-clause BSD Open Source License. See
 // LICENSE.TXT for details.
@@ -12,10 +12,10 @@
  *     contract assertions.
  */
 
-#ifndef BDS_ASSERT_H
-#define BDS_ASSERT_H
+#ifndef CSD_ASSERT_H
+#define CSD_ASSERT_H
 
-#if !defined(BDS_DISABLE_ASSERTS)
+#if !defined(CSD_DISABLE_ASSERTS)
 
 #include <cstdio>
 #include <cstdlib>
@@ -23,7 +23,7 @@
 #if defined(__cpp_lib_experimental_source_location)
 #include <experimental/source_location>
 
-#define BDS_ASSERT(Test, ...)                                                  \
+#define CSD_ASSERT(Test, ...)                                                  \
   if (!(Test)) {                                                               \
     constexpr auto srcloc = std::experimental::source_location::current();     \
     std::fprintf(stderr, "Assertion failed in %s@%s:%d:%d: " #Test,            \
@@ -35,7 +35,7 @@
 
 #else // defined(__cpp_lib_experimental_source_location)
 
-#define BDS_ASSERT(Test, ...)                                                  \
+#define CSD_ASSERT(Test, ...)                                                  \
   if (!(Test)) {                                                               \
     std::fprintf(stderr, "Assertion failed in %s@%s:%d: " #Test, __FUNCTION__, \
                  __FILE__, __LINE__);                                          \
@@ -45,9 +45,9 @@
 
 #endif
 
-#else // !defined(BDS_DISABLE_ASSERTS)
+#else // !defined(CSD_DISABLE_ASSERTS)
 
-#define BDS_ASSERT(Test, ...)
+#define CSD_ASSERT(Test, ...)
 
 #endif
 

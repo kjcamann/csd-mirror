@@ -5,24 +5,24 @@
 #include <type_traits>
 
 #include <catch2/catch.hpp>
-#include <bds/tailq.h>
+#include <csd/tailq.h>
 
 #include "list_modifier_tests.h"
 #include "list_operation_tests.h"
 
-using namespace bds;
+using namespace csd;
 
 using S = BaseS<tailq_entry>;
 using T = BaseT<tailq_entry>;
 using U = BaseU<tailq_entry>;
 
-using tq_head_t = BDS_TAILQ_HEAD_OFFSET_T(S, next);
-using tq_head_inline_t = BDS_TAILQ_HEAD_OFFSET_T(S, next, std::size_t);
+using tq_head_t = CSD_TAILQ_HEAD_OFFSET_T(S, next);
+using tq_head_inline_t = CSD_TAILQ_HEAD_OFFSET_T(S, next, std::size_t);
 using tq_head_invoke_t = tailq_head_cinvoke_t<&T::next>;
 using tq_head_stateful_t = tailq_head<U, U::accessor_type>;
 
 using tq_fwd_head_t = tailq_fwd_head<S>;
-using tq_proxy_t = BDS_TAILQ_PROXY_OFFSET_T(S, next);
+using tq_proxy_t = CSD_TAILQ_PROXY_OFFSET_T(S, next);
 using tq_proxy_stateful_t = tailq_proxy<tailq_fwd_head<U>, U::accessor_type>;
 using tq_test_proxy_t = list_test_proxy<tq_proxy_t>;
 using tq_test_proxy_stateful_t = list_test_proxy<tq_proxy_stateful_t>;
@@ -45,8 +45,8 @@ static_assert(!SList<tq_proxy_t>);
 // initialization for tailq_entry<T>, where we cannot know which union member
 // will be used, so we pick one.
 static_assert(
-    std::is_standard_layout_v<bds::invocable_tagged_ref<tailq_entry<S>, S>> &&
-    std::is_standard_layout_v<bds::offset_entry_ref<tailq_entry<S>>>);
+    std::is_standard_layout_v<csd::invocable_tagged_ref<tailq_entry<S>, S>> &&
+    std::is_standard_layout_v<csd::offset_entry_ref<tailq_entry<S>>>);
 
 TEST_CASE("tailq.basic.offset", "[tailq][basic][offset]") {
   // "offset" in the test case name refers to the offsetof(...) link accessor

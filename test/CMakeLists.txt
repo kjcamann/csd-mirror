@@ -16,7 +16,7 @@ if (GIT_FOUND)
     catch2
     PREFIX "${CMAKE_BINARY_DIR}/catch2"
     GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-    GIT_TAG v2.5.0 # FIXME: segfaults in v2.6.0
+    GIT_TAG v2.8.0
     CMAKE_ARGS ${CATCH_CMAKE_ARGS}
     LOG_DOWNLOAD 1
     UPDATE_DISCONNECTED 1
@@ -36,20 +36,21 @@ set_property(TARGET test_driver PROPERTY CXX_STANDARD 20)
 target_include_directories(test_driver PRIVATE
     "${CMAKE_BINARY_DIR}/external/include")
 
-function(add_bds_test name)
+add_dependencies(test_driver catch2)
+
+function(add_csd_test name)
   add_executable(${name} "${name}.cpp")
-  set_property(TARGET ${name} PROPERTY FOLDER "bds_tests")
+  set_property(TARGET ${name} PROPERTY FOLDER "csd_tests")
   set_property(TARGET ${name} PROPERTY CXX_STANDARD 20)
 
-  # Ensure catch2 includes can be found, and link to bds
+  # Ensure catch2 includes can be found, and link to csd
   target_include_directories(${name} PRIVATE
     "${CMAKE_BINARY_DIR}/external/include")
-  target_link_libraries(${name} PRIVATE test_driver bds)
+  target_link_libraries(${name} PRIVATE test_driver csd)
 
-  add_dependencies("${name}" catch2)
   add_test(${name} ${name})
 endfunction()
 
-add_bds_test(slist_tests)
-add_bds_test(stailq_tests)
-add_bds_test(tailq_tests)
+add_csd_test(slist_tests)
+add_csd_test(stailq_tests)
+add_csd_test(tailq_tests)

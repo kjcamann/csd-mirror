@@ -1,6 +1,6 @@
-//==-- bds/listfwd.h - Forward decl. for queue(3)-style lists ---*- C++ -*-==//
+//==-- csd/listfwd.h - Forward decl. for queue(3)-style lists ---*- C++ -*-==//
 //
-//                     BSD Data Structures (BDS) Library
+//                Cyril Software Data Structures (CSD) Library
 //
 // This file is distributed under the 2-clause BSD Open Source License. See
 // LICENSE.TXT for details.
@@ -12,8 +12,8 @@
  *     utilities for the slist, stailq, and tailq classes.
  */
 
-#ifndef BDS_LISTFWD_H
-#define BDS_LISTFWD_H
+#ifndef CSD_LISTFWD_H
+#define CSD_LISTFWD_H
 
 #include <cstddef>
 #include <cstdint>
@@ -21,13 +21,13 @@
 #include <iterator>
 #include <type_traits>
 
-#include <bds/intrusive.h>
-#include <bds/utility.h>
+#include <csd/intrusive.h>
+#include <csd/utility.h>
 
-namespace bds {
+namespace csd {
 
-#define BDS_DEPRECATE_LIST_ATTR                                                \
-  [[deprecated("tailq should always be used instead of list, see the BDS "     \
+#define CSD_DEPRECATE_LIST_ATTR                                                \
+  [[deprecated("tailq should always be used instead of list, see the CSD "     \
                "documentation")]]
 
 /*
@@ -65,13 +65,13 @@ template <typename ListType>
 concept SList = util::DerivedFromTemplate<ListType, slist_head> ||
     util::DerivedFromTemplate<ListType, slist_proxy>;
 
-#define BDS_SLIST_HEAD_OFFSET_T(TYPE, MEMBER, ...) \
-  bds::slist_head<TYPE, bds::slist_entry_offset<offsetof(TYPE, MEMBER)> \
+#define CSD_SLIST_HEAD_OFFSET_T(TYPE, MEMBER, ...) \
+  csd::slist_head<TYPE, csd::slist_entry_offset<offsetof(TYPE, MEMBER)> \
                  __VA_OPT__(,) __VA_ARGS__>
 
-#define BDS_SLIST_PROXY_OFFSET_T(TYPE, MEMBER, ...) \
-  bds::slist_proxy<bds::slist_fwd_head<TYPE __VA_OPT__(,) __VA_ARGS__>, \
-                   bds::slist_entry_offset<offsetof(TYPE, MEMBER)>>
+#define CSD_SLIST_PROXY_OFFSET_T(TYPE, MEMBER, ...) \
+  csd::slist_proxy<csd::slist_fwd_head<TYPE __VA_OPT__(,) __VA_ARGS__>, \
+                   csd::slist_entry_offset<offsetof(TYPE, MEMBER)>>
 
 template <auto Invocable, CompressedSize SizeMember = no_size>
 using slist_head_cinvoke_t = slist_head<
@@ -111,20 +111,20 @@ template <typename T, STailQEntryAccessor<T> EntryAccess,
 class stailq_head;
 
 template <typename FwdHead,
-          STailQEntryAccessor<typename FwdHead::value_type>>
+          STailQEntryAccessor< typename FwdHead::value_type> >
 class stailq_proxy;
 
 template <typename ListType>
 concept STailQ = util::DerivedFromTemplate<ListType, stailq_head> ||
     util::DerivedFromTemplate<ListType, stailq_proxy>;
 
-#define BDS_STAILQ_HEAD_OFFSET_T(TYPE, MEMBER, ...) \
-  bds::stailq_head<TYPE, bds::stailq_entry_offset<offsetof(TYPE, MEMBER)> \
+#define CSD_STAILQ_HEAD_OFFSET_T(TYPE, MEMBER, ...) \
+  csd::stailq_head<TYPE, csd::stailq_entry_offset<offsetof(TYPE, MEMBER)> \
                    __VA_OPT__(,) __VA_ARGS__>;
 
-#define BDS_STAILQ_PROXY_OFFSET_T(TYPE, MEMBER, ...) \
-  bds::stailq_proxy<bds::stailq_fwd_head<TYPE __VA_OPT__(,) __VA_ARGS__>, \
-                    bds::stailq_entry_offset<offsetof(TYPE, MEMBER)>>
+#define CSD_STAILQ_PROXY_OFFSET_T(TYPE, MEMBER, ...) \
+  csd::stailq_proxy<csd::stailq_fwd_head<TYPE __VA_OPT__(,) __VA_ARGS__>, \
+                    csd::stailq_entry_offset<offsetof(TYPE, MEMBER)>>
 
 template <auto Invocable, CompressedSize SizeMember = no_size>
 using stailq_head_cinvoke_t = stailq_head<
@@ -171,13 +171,13 @@ template <typename ListType>
 concept TailQ = util::DerivedFromTemplate<ListType, tailq_head> ||
     util::DerivedFromTemplate<ListType, tailq_proxy>;
 
-#define BDS_TAILQ_HEAD_OFFSET_T(TYPE, MEMBER, ...) \
-  bds::tailq_head<TYPE, bds::tailq_entry_offset<offsetof(TYPE, MEMBER)> \
+#define CSD_TAILQ_HEAD_OFFSET_T(TYPE, MEMBER, ...) \
+  csd::tailq_head<TYPE, csd::tailq_entry_offset<offsetof(TYPE, MEMBER)> \
                   __VA_OPT__(,) __VA_ARGS__>
 
-#define BDS_TAILQ_PROXY_OFFSET_T(TYPE, MEMBER, ...) \
-  bds::tailq_proxy<bds::tailq_fwd_head<TYPE __VA_OPT__(,) __VA_ARGS__>, \
-                   bds::tailq_entry_offset<offsetof(TYPE, MEMBER)>>
+#define CSD_TAILQ_PROXY_OFFSET_T(TYPE, MEMBER, ...) \
+  csd::tailq_proxy<csd::tailq_fwd_head<TYPE __VA_OPT__(,) __VA_ARGS__>, \
+                   csd::tailq_entry_offset<offsetof(TYPE, MEMBER)>>
 
 template <auto Invocable, CompressedSize SizeMember = no_size>
 using tailq_head_cinvoke_t = tailq_head<
@@ -194,15 +194,15 @@ using tailq_proxy_cinvoke_t = tailq_proxy<
  */
 
 template <typename T>
-using list_entry BDS_DEPRECATE_LIST_ATTR = tailq_entry<T>;
+using list_entry CSD_DEPRECATE_LIST_ATTR = tailq_entry<T>;
 
 template <std::size_t Offset>
-using list_entry_offset BDS_DEPRECATE_LIST_ATTR = tailq_entry_offset<Offset>;
+using list_entry_offset CSD_DEPRECATE_LIST_ATTR = tailq_entry_offset<Offset>;
 
 // FIXME [C++20] can attributes appear here? This was allowed in gcc but not
 // clang
 template <typename ListType>
-concept List /*BDS_DEPRECATE_LIST_ATTR*/ = TailQ<ListType>;
+concept List /*CSD_DEPRECATE_LIST_ATTR*/ = TailQ<ListType>;
 
 /*
  * Concepts / helper functions used for multiple list types
@@ -341,6 +341,6 @@ forward_list_merge_sort(typename ListType::const_iterator p1,
 
 } // End of namespace detail
 
-} // End of namespace bds
+} // End of namespace csd
 
 #endif

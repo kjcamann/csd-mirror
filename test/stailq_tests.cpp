@@ -3,25 +3,25 @@
 #include <type_traits>
 
 #include <catch2/catch.hpp>
-#include <bds/stailq.h>
+#include <csd/stailq.h>
 
 #include "list_modifier_tests.h"
 #include "list_operation_tests.h"
 
-using namespace bds;
+using namespace csd;
 
 using S = BaseS<stailq_entry>;
 using T = BaseT<stailq_entry>;
 using U = BaseU<stailq_entry>;
 
-using stq_head_t = BDS_STAILQ_HEAD_OFFSET_T(S, next);
-using stq_head_inline_t = BDS_STAILQ_HEAD_OFFSET_T(S, next, std::size_t);
+using stq_head_t = CSD_STAILQ_HEAD_OFFSET_T(S, next);
+using stq_head_inline_t = CSD_STAILQ_HEAD_OFFSET_T(S, next, std::size_t);
 using stq_head_invoke_t = stailq_head_cinvoke_t<&T::next>;
 using stq_head_stateful_t = stailq_head<U, U::accessor_type>;
 
 using stq_fwd_head_t = stailq_fwd_head<S>;
-using stq_proxy_t = BDS_STAILQ_PROXY_OFFSET_T(S, next);
-using stq_proxy_inline_t = BDS_STAILQ_PROXY_OFFSET_T(S, next, std::size_t);
+using stq_proxy_t = CSD_STAILQ_PROXY_OFFSET_T(S, next);
+using stq_proxy_inline_t = CSD_STAILQ_PROXY_OFFSET_T(S, next, std::size_t);
 using stq_proxy_stateful_t = stailq_proxy<stailq_fwd_head<U>, U::accessor_type>;
 using stq_test_proxy_t = list_test_proxy<stq_proxy_t>;
 using stq_test_proxy_inline_t = list_test_proxy<stq_proxy_inline_t>;

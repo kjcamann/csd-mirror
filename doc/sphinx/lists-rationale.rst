@@ -193,7 +193,7 @@ Look at the definition of the FreeBSD process structure (from ``<sys/proc.h>``) 
            struct mtx	p_itimmtx;	/* Lock for the virt/prof timers */
            struct mtx	p_profmtx;	/* Lock for the profiling */
 
-           /* ...many fields removed from BDS documentation... */
+           /* ...many fields removed from CSD documentation... */
 
            /*
             * An orphan is the child that has beed re-parented to the
@@ -230,13 +230,13 @@ Many of us in the C++ developer community know Sean Parent; he has given a numbe
 
 I think he's on to something: it seems that all the comprehension superpowers I know -- indentation, value semantics, intrusive lists, etc. -- ultimately derive their power from how they enrich a small piece of text with a lot of information.
 
-Early in the development of BDS, intrusive entry objects did not re-specify the type of linked list they lived in, i.e., code using BDS used to look like this:
+Early in the development of CSD, intrusive entry objects did not re-specify the type of linked list they lived in, i.e., code using CSD used to look like this:
 
 .. code-block:: c++
 
    struct ListItem {
      int i;
-     bds::tailq_entry e;  // Note: not a template
+     csd::tailq_entry e;  // Note: not a template
    };
 
 Later, it was changed to its current form:
@@ -245,12 +245,12 @@ Later, it was changed to its current form:
 
    struct ListItem {
      int i;
-     bds::tailq_entry<ListItem> e; // Link us into a list of other ListItems
+     csd::tailq_entry<ListItem> e; // Link us into a list of other ListItems
    };
 
 This is redundant, and the template makes the implementation more complex. It was changed because after a long hiatus of not reading any FreeBSD kernel code, I returned to it and discovered that it makes some small difference -- in terms of "effortless comprehension" -- to see the type of the list locally restated. Look again at the above code listing for the FreeBSD process structure, ``struct proc``. All the entry macros restate that their purpose is to join a ``struct proc`` into a data structure containing other ``struct proc`` instances, e.g., ``LIST_ENTRY(proc) p_list`` for the global process list.
 
-This is needed in ``queue(3)`` because of how the implementation works, but it is not strictly necessary in BDS. In the old code, that the ``e`` member links us into a list of other ``ListItem`` instances is *implicit*: we know it's true because we're using an intrusive list and by definition, intrusive lists link the kind of objects that contain the intrusive linkage. The old way wasn't exactly *hard* to understand without this extra comprehension cue, but it lacked the clarity evident in the ``struct proc`` example. This originally went unnoticed because it doesn't make much of a difference in simple examples, like the one above. As the structures grow larger, it becomes more difficult to keep track of things that are implicit/contextual. As BDS was used more extensively, it became clear that the original ``queue(3)`` style was better because it improved -- in the words of Sean Parent -- the "ability to locally reason about code."
+This is needed in ``queue(3)`` because of how the implementation works, but it is not strictly necessary in CSD. In the old code, that the ``e`` member links us into a list of other ``ListItem`` instances is *implicit*: we know it's true because we're using an intrusive list and by definition, intrusive lists link the kind of objects that contain the intrusive linkage. The old way wasn't exactly *hard* to understand without this extra comprehension cue, but it lacked the clarity evident in the ``struct proc`` example. This originally went unnoticed because it doesn't make much of a difference in simple examples, like the one above. As the structures grow larger, it becomes more difficult to keep track of things that are implicit/contextual. As CSD was used more extensively, it became clear that the original ``queue(3)`` style was better because it improved -- in the words of Sean Parent -- the "ability to locally reason about code."
 
 For what it's worth, I don't think Sean Parent would be that enamored of intrusive lists: they are typically reference-heavy structures that point all over the place. That said, I doubt there is much of an alternative. Look at the sheer number of different data structures that a ``struct proc`` must simultaneously live in. This number cannot be reduced; the complexity of those relationships is specified by the UNIX process model, which has served us well for decades; it's a good design we want to keep. Our goal is to create a source code design that helps us "mentally manage" that complexity. Intrusive lists make it possible to see all these relationships together and to draw clear architecture diagrams of how they appear in code. That makes it easier for new engineers to learn that architecture and the kernel code base, ensuring that UNIX continues to march on to victory.
 

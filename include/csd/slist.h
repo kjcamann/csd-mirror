@@ -1,6 +1,6 @@
-//==-- bds/slist.h - singly-linked tail queue implementation ----*- C++ -*-==//
+//==-- csd/slist.h - singly-linked tail queue implementation ----*- C++ -*-==//
 //
-//                     BSD Data Structures (BDS) Library
+//                Cyril Software Data Structures (CSD) Library
 //
 // This file is distributed under the 2-clause BSD Open Source License. See
 // LICENSE.TXT for details.
@@ -12,8 +12,8 @@
  *     lists, inspired by BSD's queue(3) SLIST_ macros.
  */
 
-#ifndef BDS_SLIST_H
-#define BDS_SLIST_H
+#ifndef CSD_SLIST_H
+#define CSD_SLIST_H
 
 #include <cstddef>
 #include <functional>
@@ -22,10 +22,10 @@
 #include <type_traits>
 #include <utility>
 
-#include <bds/assert.h>
-#include <bds/listfwd.h>
+#include <csd/assert.h>
+#include <csd/listfwd.h>
 
-namespace bds {
+namespace csd {
 
 template <typename T>
 struct slist_entry {
@@ -83,7 +83,11 @@ private:
   template <typename T2, SListEntryAccessor<T2>, CompressedSize, typename>
   friend class slist_base;
 
-  template <typename T2, SListEntryAccessor<typename T2::value_type>>
+  // FIXME: the extra spacing around `typename T2::value_value` is due to a
+  // a bug in the gcc9 concepts TS support (not parsing >> in templates
+  // correctly) and can be removed later. This problem exists in a few other
+  // places, search for "> >" to fix everywhere.
+  template <typename T2, SListEntryAccessor< typename T2::value_type> >
   friend class slist_proxy;
 
   template <typename T2, SListEntryAccessor<T2>, CompressedSize>
@@ -359,7 +363,7 @@ private:
   template <typename T2, SListEntryAccessor<T2>, CompressedSize, typename>
   friend class slist_base;
 
-  template <typename T2, SListEntryAccessor<typename T2::value_type>>
+  template <typename T2, SListEntryAccessor< typename T2::value_type> >
   friend class slist_proxy;
 
   template <typename T2, SListEntryAccessor<T2>, CompressedSize>
@@ -792,7 +796,7 @@ void slist_base<T, E, S, D>::clear() noexcept {
 template <typename T, SListEntryAccessor<T> E, CompressedSize S, typename D>
 slist_base<T, E, S, D>::iterator
 slist_base<T, E, S, D>::insert_after(const_iterator pos, T *value) noexcept {
-  BDS_ASSERT(pos != end(), "end() iterator passed to insert_after");
+  CSD_ASSERT(pos != end(), "end() iterator passed to insert_after");
 
   const entry_ref_type valueRef = entry_ref_codec::create_entry_ref(value);
 
@@ -822,7 +826,7 @@ slist_base<T, E, S, D>::insert_after(const_iterator pos, InputIt first,
 template <typename T, SListEntryAccessor<T> E, CompressedSize S, typename D>
 slist_base<T, E, S, D>::iterator
 slist_base<T, E, S, D>::erase_after(const_iterator pos) noexcept {
-  BDS_ASSERT(pos != end(), "end() iterator passed to erase_after");
+  CSD_ASSERT(pos != end(), "end() iterator passed to erase_after");
 
   entry_type *const posEntry = getEntry(pos);
   const bool isLastEntry = !(posEntry->next.*EntryRefMember);
@@ -943,7 +947,7 @@ void slist_base<T, E, S1, D1>::splice_after(const_iterator pos,
   if (other.empty())
     return;
 
-  BDS_ASSERT(pos.m_current && "end() iterator passed as pos");
+  CSD_ASSERT(pos.m_current && "end() iterator passed as pos");
 
   getEntry(pos)->next = other.begin().m_current;
 
@@ -957,13 +961,13 @@ template <typename T, SListEntryAccessor<T> E, CompressedSize S1, typename D1>
 template <CompressedSize S2, typename D2>
 void slist_base<T, E, S1, D1>::splice_after(
     const_iterator pos, other_list_t<S2, D2> &other,
-    other_list_t<S2, D2>::const_iterator first,
-    other_list_t<S2, D2>::const_iterator last) noexcept {
+    typename other_list_t<S2, D2>::const_iterator first,
+    typename other_list_t<S2, D2>::const_iterator last) noexcept {
   if (first == last)
     return;
 
   // When the above is false, first++ must be legal.
-  BDS_ASSERT(first.m_current, "first is end() but last was not end()?");
+  CSD_ASSERT(first.m_current, "first is end() but last was not end()?");
 
   // Remove the open range (first, last) from `other`, by directly linking
   // first and last. Also post-increment first, so that it will point to the
@@ -1087,7 +1091,7 @@ slist_base<T, E, S, D>::insert_range_after(const_iterator pos, QueueIt first,
                                            QueueIt last) noexcept {
   // Inserts the closed range [first, last] after pos and returns
   // std::next(last)
-  BDS_ASSERT(pos.m_current && last.m_current,
+  CSD_ASSERT(pos.m_current && last.m_current,
              "end() iterator passed as pos or last");
 
   entry_type *const posEntry = getEntry(pos);
@@ -1101,6 +1105,6 @@ slist_base<T, E, S, D>::insert_range_after(const_iterator pos, QueueIt first,
   return iterator{oldNext, last.m_rEntryAccessor.get_invocable()};
 }
 
-} // End of namespace bds
+} // End of namespace csd
 
 #endif

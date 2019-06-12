@@ -1,5 +1,5 @@
 ******************************
-BDS lists implementation notes
+CSD lists implementation notes
 ******************************
 
 .. contents::
@@ -14,10 +14,10 @@ Links to neighboring list items are stored in intrusive "entry" structures like 
 
    struct ListItem {
      int i;
-     bds::tailq_entry<ListItem> e; // Holds links to neighboring list items
+     csd::tailq_entry<ListItem> e; // Holds links to neighboring list items
    };
 
-The term "entry" comes from the original ``queue(3)`` library macros, e.g., ``TAILQ_ENTRY(ListItem) e`` would be written instead of ``bds::tailq_entry<ListItem> e``. If you look at the definition of ``bds::tailq_entry`` however, it is much more complex. That complexity comes from the flexibility to use either offset-based entry accessors or invocable entry accessors. As :ref:`explained in the list guide <lists-how-to-choose-entryaccess>`, offset-based entry accessors usually result in better code generation but have stricter requirements (they only work with complete standard layout types).
+The term "entry" comes from the original ``queue(3)`` library macros, e.g., ``TAILQ_ENTRY(ListItem) e`` would be written instead of ``csd::tailq_entry<ListItem> e``. If you look at the definition of ``csd::tailq_entry`` however, it is much more complex. That complexity comes from the flexibility to use either offset-based entry accessors or invocable entry accessors. As :ref:`explained in the list guide <lists-how-to-choose-entryaccess>`, offset-based entry accessors usually result in better code generation but have stricter requirements (they only work with complete standard layout types).
 
 The neighbor links are stored in a different format depending on the type of entry accessor being used. One additional complexity is that we can declare entry objects without having to specify anything about the entry accessor. Thus, the entry object must be able to work with either format, regardless of which one will eventually be used. Consequently, the "neighbor link" type is a union of two different types, but only one will be used depending on the kind of entry accessor that is eventually specified in the ``tailq_head`` or ``tailq_proxy`` type.
 
@@ -26,7 +26,7 @@ The design is eaiser to understand if we look at both link formats separately fi
 offset_entry_ref
 ----------------
 
-When using an offset-based entry accessor, BDS stores neighbor links by storing pointers to the neighbors' entry objects (e.g., pointers to neighboring ``tailq_entry<ListItem>`` members) in a special smart pointer called ``offset_entry_ref`` -- so named because it is a reference to an entry used in the "offset" case. This smart pointer isn't very smart -- it adds almost nothing beyond a plain old ``tailq_entry<ListItem>*``. The reason it is a separate type is only to satisfy the C++ standard's notion of when it is safe to read from an inactive union member -- because an ``offset_entry_ref`` lives in a union with ``invocable_tagged_ref`` that we discuss next -- and there is a "dark corner" in the code where we need that to work.
+When using an offset-based entry accessor, CSD stores neighbor links by storing pointers to the neighbors' entry objects (e.g., pointers to neighboring ``tailq_entry<ListItem>`` members) in a special smart pointer called ``offset_entry_ref`` -- so named because it is a reference to an entry used in the "offset" case. This smart pointer isn't very smart -- it adds almost nothing beyond a plain old ``tailq_entry<ListItem>*``. The reason it is a separate type is only to satisfy the C++ standard's notion of when it is safe to read from an inactive union member -- because an ``offset_entry_ref`` lives in a union with ``invocable_tagged_ref`` that we discuss next -- and there is a "dark corner" in the code where we need that to work.
 
 .. figure:: images/lists-offset-entry-ref.png
    :alt: tailq using an offset_entry_ref link encoding
@@ -97,7 +97,7 @@ Iterator implementation
 
 List iterators store an entry ref for the "current" entry. As described above, with the help of the ``entry_ref_codec`` (and the ``EntryAccess`` functor, for invocable link encoding), the iterator can access both the entry object and the list item.
 
-The iterator is either the size of a single pointer or two pointers, depending on the ``EntryAccess`` functor. The iterator stores a special "smart pointer" to the invocable object, :cpp:class:`bds::compressed_invocable_ref`, which (using template partial specialization) is empty if the ``EntryAccess`` functor is :cpp:concept:`stateless <bds::Stateless>`, i.e., if it is both an empty class and is trivially-constructible. This smart pointer is also declared with ``[[no_unique_address]]``, so if the accessor is stateless, it will not store anything. This is the common case, because both offset-based and `constexpr_invocable`-based functors are stateless.
+The iterator is either the size of a single pointer or two pointers, depending on the ``EntryAccess`` functor. The iterator stores a special "smart pointer" to the invocable object, :cpp:class:`csd::compressed_invocable_ref`, which (using template partial specialization) is empty if the ``EntryAccess`` functor is :cpp:concept:`stateless <csd::Stateless>`, i.e., if it is both an empty class and is trivially-constructible. This smart pointer is also declared with ``[[no_unique_address]]``, so if the accessor is stateless, it will not store anything. This is the common case, because both offset-based and `constexpr_invocable`-based functors are stateless.
 
 List design
 ===========
@@ -146,7 +146,7 @@ Unusual code formatting convention
 
 The naming of variables, functions, and classes may seem inconsistent: sometimes ``lower_case_snake_case`` identifiers are used, other times ``camelCase`` (replete with ``m_`` member prefixes) is used. There is a pattern though: implementation details (such as a private member variables) use camelCase, whereas names in public interfaces use lower_case_snake_case. Why is this?
 
-Because BDS copies LLVM's style: its normal style is camelCase, but for consistency, it uses the STL formatting rules when implementing STL-compatible containers or helper data structures. This is a useful visual indication that the class in question supports the same interface (namely, an iterator-centric interface) as a "normal" STL class. Since almost everything in BDS is designed to be STL compatible, all parts of the public interface use lower_case_snake_case. Meanwhile, all non-public names use the CSG "house style", which is a camelCase style similar to LLVM.
+Because CSD copies LLVM's style: its normal style is camelCase, but for consistency, it uses the STL formatting rules when implementing STL-compatible containers or helper data structures. This is a useful visual indication that the class in question supports the same interface (namely, an iterator-centric interface) as a "normal" STL class. Since almost everything in CSD is designed to be STL compatible, all parts of the public interface use lower_case_snake_case. Meanwhile, all non-public names use the CSG "house style", which is a camelCase style similar to LLVM.
 
 .. rubric:: Footnotes
 

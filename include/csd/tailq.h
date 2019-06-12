@@ -1,6 +1,6 @@
-//==-- bds/tailq.h - tail queue intrusive list implementation ---*- C++ -*-==//
+//==-- csd/tailq.h - tail queue intrusive list implementation ---*- C++ -*-==//
 //
-//                     BSD Data Structures (BDS) Library
+//                Cyril Software Data Structures (CSD) Library
 //
 // This file is distributed under the 2-clause BSD Open Source License. See
 // LICENSE.TXT for details.
@@ -12,18 +12,18 @@
  *     inspired by BSD's queue(3) TAILQ_ macros.
  */
 
-#ifndef BDS_TAILQ_H
-#define BDS_TAILQ_H
+#ifndef CSD_TAILQ_H
+#define CSD_TAILQ_H
 
 #include <cstdint>
 #include <initializer_list>
 #include <iterator>
 #include <type_traits>
 
-#include <bds/assert.h>
-#include <bds/listfwd.h>
+#include <csd/assert.h>
+#include <csd/listfwd.h>
 
-namespace bds {
+namespace csd {
 
 template <typename T>
 struct tailq_entry {
@@ -811,7 +811,7 @@ tailq_base<T, E, S, D>::erase(const_iterator pos) noexcept {
   entry_type *const nextEntry = getEntry(erasedEntry->next);
   entry_type *const prevEntry = getEntry(erasedEntry->prev);
 
-  BDS_ASSERT(erasedEntry != &getTailQData().m_endEntry,
+  CSD_ASSERT(erasedEntry != &getTailQData().m_endEntry,
              "end() iterator passed to erase");
 
   prevEntry->next = erasedEntry->next;
@@ -911,8 +911,8 @@ template <typename T, TailQEntryAccessor<T> E, CompressedSize S1, typename D1>
 template <CompressedSize S2, typename D2>
 void tailq_base<T, E, S1, D1>::splice(
     const_iterator pos, other_list_t<S2, D2> &other,
-    other_list_t<S2, D2>::const_iterator first,
-    other_list_t<S2, D2>::const_iterator last) noexcept {
+    typename other_list_t<S2, D2>::const_iterator first,
+    typename other_list_t<S2, D2>::const_iterator last) noexcept {
   if (first == last)
     return;
 
@@ -1141,6 +1141,6 @@ void tailq_base<T, E, S, D>::remove_range(const_iterator first,
   afterLastEntry->prev = firstEntry->prev;
 }
 
-} // End of namespace bds
+} // End of namespace csd
 
 #endif

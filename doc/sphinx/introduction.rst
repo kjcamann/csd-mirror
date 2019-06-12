@@ -3,5 +3,9 @@ Introduction
 ************
 
 .. include:: ../../README.rst
-   :start-after: bds-readme-include-begin
-   :end-before: bds-readme-include-end
+   :start-after: csd-readme-include-begin
+   :end-before: csd-readme-include-end
+
+.. include:: ../../README.rst
+   :start-after: csd-readme-footnote-begin
+   :end-before: csd-readme-footnote-end

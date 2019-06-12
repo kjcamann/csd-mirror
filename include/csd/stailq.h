@@ -1,6 +1,6 @@
-//==-- bds/stailq.h - singly-linked tail queue implementation ---*- C++ -*-==//
+//==-- csd/stailq.h - singly-linked tail queue implementation ---*- C++ -*-==//
 //
-//                     BSD Data Structures (BDS) Library
+//                Cyril Software Data Structures (CSD) Library
 //
 // This file is distributed under the 2-clause BSD Open Source License. See
 // LICENSE.TXT for details.
@@ -12,8 +12,8 @@
  *     tail queues, inspired by BSD's queue(3) STAILQ_ macros.
  */
 
-#ifndef BDS_STAILQ_H
-#define BDS_STAILQ_H
+#ifndef CSD_STAILQ_H
+#define CSD_STAILQ_H
 
 #include <cstddef>
 #include <functional>
@@ -22,10 +22,10 @@
 #include <type_traits>
 #include <utility>
 
-#include <bds/assert.h>
-#include <bds/listfwd.h>
+#include <csd/assert.h>
+#include <csd/listfwd.h>
 
-namespace bds {
+namespace csd {
 
 template <typename T>
 struct stailq_entry {
@@ -97,7 +97,7 @@ private:
   template <typename T2, STailQEntryAccessor<T2>, CompressedSize, typename>
   friend class stailq_base;
 
-  template <typename T2, STailQEntryAccessor<typename T2::value_type>>
+  template <typename T2, STailQEntryAccessor< typename T2::value_type> >
   friend class stailq_proxy;
 
   template <typename T2, STailQEntryAccessor<T2>, CompressedSize>
@@ -393,7 +393,7 @@ private:
   template <typename T2, STailQEntryAccessor<T2>, CompressedSize, typename>
   friend class stailq_base;
 
-  template <typename T2, STailQEntryAccessor<typename T2::value_type>>
+  template <typename T2, STailQEntryAccessor< typename T2::value_type> >
   friend class stailq_proxy;
 
   template <typename T2, STailQEntryAccessor<T2>, CompressedSize>
@@ -830,7 +830,7 @@ void stailq_base<T, E, S, D>::clear() noexcept {
 template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
 stailq_base<T, E, S, D>::iterator
 stailq_base<T, E, S, D>::insert_after(const_iterator pos, T *value) noexcept {
-  BDS_ASSERT(pos != end(), "end() iterator passed to insert_after");
+  CSD_ASSERT(pos != end(), "end() iterator passed to insert_after");
 
   const entry_ref_type valueRef = entry_ref_codec::create_entry_ref(value);
 
@@ -863,7 +863,7 @@ stailq_base<T, E, S, D>::insert_after(const_iterator pos, InputIt first,
 template <typename T, STailQEntryAccessor<T> E, CompressedSize S, typename D>
 stailq_base<T, E, S, D>::iterator
 stailq_base<T, E, S, D>::erase_after(const_iterator pos) noexcept {
-  BDS_ASSERT(pos != end(), "end() iterator passed to erase_after");
+  CSD_ASSERT(pos != end(), "end() iterator passed to erase_after");
 
   entry_type *const posEntry = getEntry(pos);
   const bool isLastEntry = !(posEntry->next.*EntryRefMember);
@@ -1005,7 +1005,7 @@ void stailq_base<T, E, S1, D1>::splice_after(const_iterator pos,
   if (other.empty())
     return;
 
-  BDS_ASSERT(pos.m_current && "end() iterator passed as pos");
+  CSD_ASSERT(pos.m_current && "end() iterator passed as pos");
 
   entry_type *const posEntry = getEntry(pos);
 
@@ -1028,13 +1028,13 @@ template <typename T, STailQEntryAccessor<T> E, CompressedSize S1, typename D1>
 template <CompressedSize S2, typename D2>
 void stailq_base<T, E, S1, D1>::splice_after(
     const_iterator pos, other_list_t<S2, D2> &other,
-    other_list_t<S2, D2>::const_iterator first,
-    other_list_t<S2, D2>::const_iterator last) noexcept {
+    typename other_list_t<S2, D2>::const_iterator first,
+    typename other_list_t<S2, D2>::const_iterator last) noexcept {
   if (first == last)
     return;
 
   // When the above is false, getEntry(first) and first++ must be legal.
-  BDS_ASSERT(first.m_current, "first is end() but last was not end()?");
+  CSD_ASSERT(first.m_current, "first is end() but last was not end()?");
 
   if (!last.m_current) {
     // last is end(), so we're removing the tail element -- first points to
@@ -1170,7 +1170,7 @@ stailq_base<T, E, S, D>::insert_range_after(const_iterator pos, QueueIt first,
                                             QueueIt last) noexcept {
   // Inserts the closed range [first, last] after pos, and returns the
   // successor to last.
-  BDS_ASSERT(pos.m_current && last.m_current,
+  CSD_ASSERT(pos.m_current && last.m_current,
              "end() iterator passed as pos or last");
 
   entry_type *const posEntry = getEntry(pos);
@@ -1184,6 +1184,6 @@ stailq_base<T, E, S, D>::insert_range_after(const_iterator pos, QueueIt first,
   return iterator{oldNext, last.m_rEntryAccessor.get_invocable()};
 }
 
-} // End of namespace bds
+} // End of namespace csd
 
 #endif

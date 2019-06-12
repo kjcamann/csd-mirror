@@ -1,6 +1,6 @@
-//==-- bds/intrusive.h - Intrusive data structure utilities -----*- C++ -*-==//
+//==-- csd/intrusive.h - Intrusive data structure utilities -----*- C++ -*-==//
 //
-//                     BSD Data Structures (BDS) Library
+//                Cyril Software Data Structures (CSD) Library
 //
 // This file is distributed under the 2-clause BSD Open Source License. See
 // LICENSE.TXT for details.
@@ -12,8 +12,8 @@
  *     data structures.
  */
 
-#ifndef BDS_INTRUSIVE_H
-#define BDS_INTRUSIVE_H
+#ifndef CSD_INTRUSIVE_H
+#define CSD_INTRUSIVE_H
 
 #include <cstddef>
 #include <iterator>
@@ -21,9 +21,9 @@
 #include <type_traits>
 #include <utility>
 
-#include <bds/utility.h>
+#include <csd/utility.h>
 
-namespace bds {
+namespace csd {
 
 /**
  * @brief Wrap a constexpr invocable in a stateless function object, so it can
@@ -428,6 +428,6 @@ struct invocable_traits<Member(Class)> {
 template <auto Invocable>
 using cinvoke_traits_t = invocable_traits<decltype(Invocable)>;
 
-} // End of namespace bds
+} // End of namespace csd
 
 #endif

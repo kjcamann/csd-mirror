@@ -1,5 +1,5 @@
-#ifndef BDS_LIST_OPERATION_TESTS_H
-#define BDS_LIST_OPERATION_TESTS_H
+#ifndef CSD_LIST_OPERATION_TESTS_H
+#define CSD_LIST_OPERATION_TESTS_H
 
 #include <catch2/catch.hpp>
 #include "list_test_util.h"
@@ -7,7 +7,7 @@
 // Number of iterations to run for random input tests (merge, sort, etc.)
 constexpr std::size_t nIter = 1UL << 10;
 
-template <bds::LinkedList ListHeadType>
+template <csd::LinkedList ListHeadType>
 void merge_tests() {
   using E = ListHeadType::value_type;
 
@@ -36,7 +36,7 @@ void merge_tests() {
     REQUIRE( isSorted );
     REQUIRE( isSizeOk );
 
-    if constexpr (bds::STailQ<ListHeadType>)
+    if constexpr (csd::STailQ<ListHeadType>)
       REQUIRE( std::addressof(*head1.before_end()) == &e[3] );
 
     // Check that merge with an empty list is a no-op
@@ -70,7 +70,7 @@ void merge_tests() {
 
     REQUIRE( head1.empty() );
     REQUIRE( head2.empty() );
-    if constexpr (bds::STailQ<ListHeadType>) {
+    if constexpr (csd::STailQ<ListHeadType>) {
       REQUIRE( head1.before_begin() == head1.before_end() );
       REQUIRE( head2.before_begin() == head2.before_end() );
     }
@@ -101,7 +101,7 @@ void merge_tests() {
           is_sorted_check(std::begin(lhs), std::end(lhs), comp, totalSize);
       bool beforeEndOk = true;
 
-      if constexpr (bds::STailQ<ListHeadType>) {
+      if constexpr (csd::STailQ<ListHeadType>) {
 	// Ensure that before_end() is properly maintained by the merge for
 	// singly-linked tail queues.
 	if (std::empty(lhs))
@@ -141,7 +141,7 @@ void merge_tests() {
   }
 }
 
-template <bds::LinkedList ListHeadType>
+template <csd::LinkedList ListHeadType>
 void remove_tests() {
   using E = ListHeadType::value_type;
   ListHeadType head;
@@ -157,7 +157,7 @@ void remove_tests() {
   REQUIRE( std::addressof(*i++) == &e[1] );
   REQUIRE( std::addressof(*i++) == &e[4] );
   REQUIRE( i == head.end() );
-  if constexpr (bds::STailQ<ListHeadType>)
+  if constexpr (csd::STailQ<ListHeadType>)
     REQUIRE( std::addressof(*head.before_end()) == &e[4] );
 
   // Also test uniform container erasure
@@ -165,7 +165,7 @@ void remove_tests() {
   REQUIRE( std::size(head) == 0 );
 }
 
-template <bds::LinkedList ListHeadType>
+template <csd::LinkedList ListHeadType>
 void reverse_tests() {
   using E = ListHeadType::value_type;
   ListHeadType head;
@@ -179,18 +179,18 @@ void reverse_tests() {
   REQUIRE( std::addressof(*i++) == &e[1] );
   REQUIRE( std::addressof(*i++) == &e[0] );
   REQUIRE( i == head.end() );
-  if constexpr (bds::STailQ<ListHeadType>)
+  if constexpr (csd::STailQ<ListHeadType>)
     REQUIRE( std::addressof(*head.before_end()) == &e[0] );
 
   // Check reverse of empty list is a no-op
   head.clear();
   head.reverse();
   REQUIRE( head.empty() );
-  if constexpr (bds::STailQ<ListHeadType>)
+  if constexpr (csd::STailQ<ListHeadType>)
     REQUIRE( head.before_end() == head.end() );
 }
 
-template <bds::LinkedList ListHeadType>
+template <csd::LinkedList ListHeadType>
 void unique_tests() {
   using E = ListHeadType::value_type;
   ListHeadType head;
@@ -206,11 +206,11 @@ void unique_tests() {
   REQUIRE( std::addressof(*i++) == &e[4] );
   REQUIRE( i == head.end() );
 
-  if constexpr (bds::STailQ<ListHeadType>)
+  if constexpr (csd::STailQ<ListHeadType>)
     REQUIRE( std::addressof(*head.before_end()) == &e[4] );
 }
 
-template <bds::LinkedList ListHeadType>
+template <csd::LinkedList ListHeadType>
 void sort_tests() {
   using E = ListHeadType::value_type;
   ListHeadType head;
@@ -231,7 +231,7 @@ void sort_tests() {
     REQUIRE( std::addressof(*i++) == &e[3] );
     REQUIRE( i == head.end() );
 
-    if constexpr (bds::STailQ<ListHeadType>)
+    if constexpr (csd::STailQ<ListHeadType>)
       REQUIRE( std::addressof(*head.before_end()) == &e[3] );
   }
 
@@ -246,7 +246,7 @@ void sort_tests() {
     REQUIRE( std::addressof(*i++) == &e[3] );
     REQUIRE( i == head.end() );
 
-    if constexpr (bds::STailQ<ListHeadType>)
+    if constexpr (csd::STailQ<ListHeadType>)
       REQUIRE( std::addressof(*head.before_end()) == &e[3] );
   }
 
@@ -261,7 +261,7 @@ void sort_tests() {
     REQUIRE( std::addressof(*i++) == &e[3] );
     REQUIRE( i == head.end() );
 
-    if constexpr (bds::STailQ<ListHeadType>)
+    if constexpr (csd::STailQ<ListHeadType>)
       REQUIRE( std::addressof(*head.before_end()) == &e[3] );
   }
 
@@ -283,7 +283,7 @@ void sort_tests() {
           is_sorted_check(std::begin(head), std::end(head), comp, size);
       bool beforeEndOk = true;
 
-      if constexpr (bds::STailQ<ListHeadType>) {
+      if constexpr (csd::STailQ<ListHeadType>) {
         // See comments in merge_tests.
         auto last = std::max_element(std::cbegin(head), std::cend(head), comp);
 

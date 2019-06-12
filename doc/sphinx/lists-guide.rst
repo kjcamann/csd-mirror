@@ -5,16 +5,16 @@ Lists Quick Start Guide
 .. contents::
    :local:
 
-What are BDS lists?
+What are CSD lists?
 ===================
 
-BDS lists are intrusive linked lists based on the `BSD queue(3) library <https://man.openbsd.org/queue.3>`_. That library first appeared in 4.4 BSD, and is available today on most UNIX systems via the header file ``<sys/queue.h>`` (it is also included in glibc and can be found on most Linux systems). Linked lists are used to implement queues in various UNIX kernels, thus the name "queue."
+CSD lists are intrusive linked lists based on the `BSD queue(3) library <https://man.openbsd.org/queue.3>`_. That library first appeared in 4.4 BSD, and is available today on most UNIX systems via the header file ``<sys/queue.h>`` (it is also included in glibc and can be found on most Linux systems). Linked lists are used to implement queues in various UNIX kernels, thus the name "queue."
 
-The original queue library has been copied into or reimplemented in many well-known C code bases, including the Linux kernel. Like most data structure libraries written in C, it relies on macros to achieve static polymorphism. BDS lists are C++20 re-implementations that combine the data structure design from BSD queues with the design of STL containers. For example, it achieves static polymorphism using templates instead of macros.
+The original queue library has been copied into or reimplemented in many well-known C code bases, including the Linux kernel. Like most data structure libraries written in C, it relies on macros to achieve static polymorphism. CSD lists are C++20 re-implementations that combine the data structure design from BSD queues with the design of STL containers. For example, it achieves static polymorphism using templates instead of macros.
 
 To read more on why intrusive linked lists are a great data structure, see :doc:`lists-rationale`
 
-BDS provides the four data structures from ``queue(3)``:
+CSD provides the four data structures from ``queue(3)``:
 
 :slist: Singly-linked lists
 
@@ -25,7 +25,7 @@ BDS provides the four data structures from ``queue(3)``:
 :list:
    .. warning:: list is deprecated and should be avoided.
 
-   In the original ``queue(3)`` library, there is a difference between a ``LIST`` and a ``TAILQ``, but in BDS there is not. To meet the design goal of being STL-friendly, the C++ implementation of lists and tailqs must be exactly the same (see :ref:`here <lists-diff-with-queue>` for a detailed explanation). If ``<bds/list.h>`` is included, it makes lists available through tailq type aliases, but adds deprecation attributes.
+   In the original ``queue(3)`` library, there is a difference between a ``LIST`` and a ``TAILQ``, but in CSD there is not. To meet the design goal of being STL-friendly, the C++ implementation of lists and tailqs must be exactly the same (see :ref:`here <lists-diff-with-queue>` for a detailed explanation). If ``<csd/list.h>`` is included, it makes lists available through tailq type aliases, but adds deprecation attributes.
 
 A simple example
 ================
@@ -34,11 +34,11 @@ A simple example
    :name: lists-main-example
 
    #include <iostream>
-   #include <bds/slist.h>
+   #include <csd/slist.h>
 
    struct ListItem {
      int i;                           // List item's data
-     bds::slist_entry<ListItem> link; // Intrusive link that makes us part of
+     csd::slist_entry<ListItem> link; // Intrusive link that makes us part of
                                       // a `ListItem` singly-linked list
    };
 
@@ -48,7 +48,7 @@ A simple example
    // offset calculation). Because this template is somewhat verbose,
    // a number of helper macros and type aliases are available; these
    // are explained later in the documentation.
-   using list_t = bds::slist_head<
+   using list_t = csd::slist_head<
      ListItem,                                       // Type of items in list
      slist_entry_offset<offsetof(ListItem, link)>,   // How to access list links
      std::size_t>;                                   // Type for `size()`
@@ -76,17 +76,17 @@ This will print
 Where do I find the API documentation?
 ======================================
 
-There is deliberately very little doxygen documentation for BDS list member functions. They are meant to follow the standard C++ list APIs as much as possible, so you should use your favorite C++ reference (e.g., `cppreference <https://cppreference.com>`_) for `\<list\> <https://cppreference.com/w/cpp/container/list>`_ when referencing tailq and `\<forward_list\> <https://cppreference.com/w/cpp/container/forward_list>`_ when referencing slist or stailq.
+There is deliberately very little doxygen documentation for CSD list member functions. They are meant to follow the standard C++ list APIs as much as possible, so you should use your favorite C++ reference (e.g., `cppreference <https://cppreference.com>`_) for `\<list\> <https://cppreference.com/w/cpp/container/list>`_ when referencing tailq and `\<forward_list\> <https://cppreference.com/w/cpp/container/forward_list>`_ when referencing slist or stailq.
 
-However, because BDS lists are intrusive and because they follow the BSD data structure design patterns, there are some differences when compared to normal C++ containers. These changes naturally cause some of the public interface to be different.
+However, because CSD lists are intrusive and because they follow the BSD data structure design patterns, there are some differences when compared to normal C++ containers. These changes naturally cause some of the public interface to be different.
 
-The fundamental difference is that BDS lists do not own their elements. A "list" object consists of a small "head" object which points to the first (and possibly last) item in the list. The items themselves have a lifetime distinct from the list head's lifetime and are allocated elsewhere, usually in a memory pool. An illustration of a BDS ``slist`` is shown below:
+The fundamental difference is that CSD lists do not own their elements. A "list" object consists of a small "head" object which points to the first (and possibly last) item in the list. The items themselves have a lifetime distinct from the list head's lifetime and are allocated elsewhere, usually in a memory pool. An illustration of a CSD ``slist`` is shown below:
 
 .. figure:: images/lists-guide-concept.png
-   :alt: BDS slist datastructure diagram
+   :alt: CSD slist datastructure diagram
    :target: _images/lists-guide-concept.png
 
-   A BDS list object is little more than a pointer to the intial item; the items are *not* owned by the list, they are only linked into it (click to enlarge).
+   A CSD list object is little more than a pointer to the intial item; the items are *not* owned by the list, they are only linked into it (click to enlarge).
 
 Compare this with node-based lists, like ``std::forward_list``, which own their elements and store them in "node" containers that are allocated by the list itself. One possible implementation of this design is illustrated below:
 
@@ -98,13 +98,13 @@ Compare this with node-based lists, like ``std::forward_list``, which own their 
 
 This fundamental difference gives rise to a variety of smaller API differences, be sure to read the section :ref:`lists-diff-with-stl` for all the details.
 
-* BDS lists cannot be copied.
+* CSD lists cannot be copied.
 * List items are neither copied nor moved into the list -- they are just added to it (their intrusive link member variable is modified to splice the item into the list).
 * As a consequence of the above, list items are always inserted *by pointer*, i.e., for a list of type ``T``, the insert function requires a ``T*`` value. To avoid breaking with the standard containers too much, all other *non-insertion* member functions continue to use ``T&``, e.g., ``front()`` and ``back()`` return the item, not a pointer to it.
 * A list item cannot be added to multiple lists that use the same entry link.
 * The list destructor doesn't actually destroy the items (because it does not own them).
 
-To balance out these limitations, BDS lists provide some useful APIs which are not in the standard containers -- see :ref:`lists-extra-methods`.
+To balance out these limitations, CSD lists provide some useful APIs which are not in the standard containers -- see :ref:`lists-extra-methods`.
 
 Choosing the template parameters
 ================================
@@ -113,9 +113,9 @@ As can be seen in the :ref:`example above <lists-main-example>` ``slist_head`` h
 
 :T: The type of the items in the list.
 
-:EntryAccess: The type of function object that accesses the intrusive link, given an instance of ``T``. In the example above, the intrusive link is the data member ``bds::slist_entry link``. The link object is called an "entry" from the name of the corresponding ``queue(3)`` macros, e.g., ``SLIST_ENTRY``. See :ref:`lists-how-to-choose-entryaccess` for more information.
+:EntryAccess: The type of function object that accesses the intrusive link, given an instance of ``T``. In the example above, the intrusive link is the data member ``csd::slist_entry link``. The link object is called an "entry" from the name of the corresponding ``queue(3)`` macros, e.g., ``SLIST_ENTRY``. See :ref:`lists-how-to-choose-entryaccess` for more information.
 
-:SizeMember: The C++ standard container ``<list>`` offers :math:`O(1)` access to its size by storing the list size inline and maintaining it during each modifying operation. The C++ standard container ``<forward_list>``, and the BSD ``queue(3)`` library do not track list size -- getting the size is an :math:`O(n)` operation that fully traverses the list to count each item. BDS lists allow the user to choose which behavior they want. See :ref:`lists-how-to-choose-sizetype` for more information.
+:SizeMember: The C++ standard container ``<list>`` offers :math:`O(1)` access to its size by storing the list size inline and maintaining it during each modifying operation. The C++ standard container ``<forward_list>``, and the BSD ``queue(3)`` library do not track list size -- getting the size is an :math:`O(n)` operation that fully traverses the list to count each item. CSD lists allow the user to choose which behavior they want. See :ref:`lists-how-to-choose-sizetype` for more information.
 
 .. _lists-how-to-choose-entryaccess:
 
@@ -151,13 +151,13 @@ It wraps a compile-time-constant invocable (like a function member pointer, obje
    class ListItem {
    public:
      int i;
-     bds::slist_entry<ListItem> &getLink() noexcept { return link; }
+     csd::slist_entry<ListItem> &getLink() noexcept { return link; }
 
    private:
-     bds::slist_entry<ListItem> link;
+     csd::slist_entry<ListItem> link;
    };
 
-   using list_t = bds::slist_head<
+   using list_t = csd::slist_head<
      ListItem,
      constexpr_invocable<&ListItem::getLink>,
      std::size_t>;
@@ -167,7 +167,7 @@ The implementation calls ``std::invoke(<invocable-template-argument>, <item-of-t
 When to use offset-based vs. invocable accessors
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Offset-based accessors usually generate better code, but not all types can use them. The C++ standard only guarantees that ``offsetof`` will work on standard layout types, although since C++17, implementations are free to allow other types. Because of that freedom, BDS does not enforce the standard layout requirement through a template constraint, so the user must "know what they're doing" when using ``offsetof``.
+Offset-based accessors usually generate better code, but not all types can use them. The C++ standard only guarantees that ``offsetof`` will work on standard layout types, although since C++17, implementations are free to allow other types. Because of that freedom, CSD does not enforce the standard layout requirement through a template constraint, so the user must "know what they're doing" when using ``offsetof``.
 
 Invocable accessors are more powerful, and can solve two problems:
 
@@ -179,8 +179,8 @@ Invocable accessors are more powerful, and can solve two problems:
    .. code-block:: c++
 
       class C {
-        bds::slist_entry<C> link;
-        bds::slist_head<C, bds::slist_entry_offset<offsetof(C, link)>> children; // Error: C isn't complete
+        csd::slist_entry<C> link;
+        csd::slist_head<C, csd::slist_entry_offset<offsetof(C, link)>> children; // Error: C isn't complete
       };
 
    As far as the author is aware, there is nothing in the C standard that says this cannot work, but none of the popular implementations permit ``offsetof`` inside a type that is still being defined. However, using a pointer-to-member invocable here *will* work, even before the type is complete:
@@ -188,13 +188,13 @@ Invocable accessors are more powerful, and can solve two problems:
    .. code-block:: c++
 
       class C {
-        bds::slist_entry<C> link;
-        bds::slist_head<C, bds::constexpr_invocable<&C::link>> children; // OK
+        csd::slist_entry<C> link;
+        csd::slist_head<C, csd::constexpr_invocable<&C::link>> children; // OK
       };
 
-   This may seem like an odd use case, but there are several "tree-like" structures like this in the FreeBSD kernel. As one example, a ``vm_object`` contains a ``LIST_HEAD`` to its shadow ``vm_object`` children, as part of the virtual memory copy-on-write feature. There is still one restriction: the expression ``&C::link`` must appear after the ``bds::slist_entry_link<C>`` member. If the user cannot do this, the :ref:`proxy <lists-head-vs-fwd-head>` pattern can be used instead.
+   This may seem like an odd use case, but there are several "tree-like" structures like this in the FreeBSD kernel. As one example, a ``vm_object`` contains a ``LIST_HEAD`` to its shadow ``vm_object`` children, as part of the virtual memory copy-on-write feature. There is still one restriction: the expression ``&C::link`` must appear after the ``csd::slist_entry_link<C>`` member. If the user cannot do this, the :ref:`proxy <lists-head-vs-fwd-head>` pattern can be used instead.
 
-Both offset-based and ``constexpr_invocable`` functors are :cpp:concept:`stateless <bds::Stateless>`, and use no storage in the list object (thanks to a ``[[no_unique_address]]`` attribute). However, the user is free to use a stateful functor which can perform arbitrarily complex link access.
+Both offset-based and ``constexpr_invocable`` functors are :cpp:concept:`stateless <csd::Stateless>`, and use no storage in the list object (thanks to a ``[[no_unique_address]]`` attribute). However, the user is free to use a stateful functor which can perform arbitrarily complex link access.
 
 Syntactic sugar for declaring lists
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -207,16 +207,16 @@ For offset-based accessors:
 
       struct ListItem {
         int i;
-        bds::slist_entry<ListItem> link;
+        csd::slist_entry<ListItem> link;
       };
 
       // Instead of this...
-      using my_list_t = bds::slist_head<
+      using my_list_t = csd::slist_head<
           ListItem,
-          bds::slist_entry_offset<offsetof(ListItem, link)>>;
+          csd::slist_entry_offset<offsetof(ListItem, link)>>;
 
       // ...write this:
-      using my_list_t = BDS_TAILQ_HEAD_OFFSET_T(ListItem, link);
+      using my_list_t = CSD_TAILQ_HEAD_OFFSET_T(ListItem, link);
 
 For most constexpr-invocable accessors, we can use a helper type alias:
 
@@ -224,26 +224,26 @@ For most constexpr-invocable accessors, we can use a helper type alias:
 
       struct ListItem {
         int i;
-        bds::slist_entry<ListItem> link;
+        csd::slist_entry<ListItem> link;
       };
 
       // Instead of this...
-      using my_list_t = bds::slist_head<
+      using my_list_t = csd::slist_head<
           ListItem,
-          bds::constexpr_invocable<&ListItem::link>>;
+          csd::constexpr_invocable<&ListItem::link>>;
 
       // ...write this:
-      using my_list_t = bds::tailq_head_cinvoke_t<&ListItem::link>;
+      using my_list_t = csd::tailq_head_cinvoke_t<&ListItem::link>;
 
 Ideally, this helper alias would work with all invocables, not just constexpr ones. Unfortunately as of C++20, there is no "invocation traits" class that would allow us to discover the type of the first argument to the invocable, no matter what form it has. As of C++17, *constexpr* invocables can take a limited number of forms (free functions, member function pointers, etc.) and a traits class is provided that partially specializes all known syntactic forms and exposes the argument type. This won't cover the additional constexpr invocables that were added in C++20 unfortunately (constexpr non-type arguments, e.g., a constexpr lambda entry accessor). For cases that are not covered, the user must resort to the verbose declaration.
 
 .. sidebar:: A final word about offset accessors
 
-   Earlier we said that ``struct slist_entry_offset`` was a functor template. That was true in earlier releases of BDS, but it is no longer true. ``slist_entry_offset`` is not a functor (it is not callable), but is just syntactic sugar that simplifies writing a more complex template pattern. The verbose way to express the template instance would be:
+   Earlier we said that ``struct slist_entry_offset`` was a functor template. That was true in earlier releases of CSD, but it is no longer true. ``slist_entry_offset`` is not a functor (it is not callable), but is just syntactic sugar that simplifies writing a more complex template pattern. The verbose way to express the template instance would be:
 
    .. code-block:: c++
 
-      bds::slist_head<
+      csd::slist_head<
         ListItem,
         offset_extractor<slist_entry<ListItem>, offsetof(ListItem, link)>>
 
@@ -253,9 +253,9 @@ Ideally, this helper alias would work with all invocables, not just constexpr on
 
 Choosing the SizeMember Parameter
 ---------------------------------
-The ``SizeMember`` parameter can either be an integral type (in which case, the internal size member will be a field of that type) or it can be the special type ``bds::no_size``, which removes the size member and gives the :math:`O(n)` behavior.
+The ``SizeMember`` parameter can either be an integral type (in which case, the internal size member will be a field of that type) or it can be the special type ``csd::no_size``, which removes the size member and gives the :math:`O(n)` behavior.
 
-The ``bds::no_size`` option is more in-keeping with historical BSD design because typically, the size of most lists will not be greater than the maximum value of ``std::uint32_t``. However, if ``SizeMember`` is actually set to ``std::uint32_t``, the user will probably waste 4 bytes of tail padding unless they are careful to pack small members immediately after the list head object. It will not be immediately clear from the code that valuable cache line space might be being wasted, so ``bds::no_size`` is generally preferred. For this reason, ``no_size`` is also the default template argument for ``SizeMember``, hence why it is unspecified in most of the later examples.
+The ``csd::no_size`` option is more in-keeping with historical BSD design because typically, the size of most lists will not be greater than the maximum value of ``std::uint32_t``. However, if ``SizeMember`` is actually set to ``std::uint32_t``, the user will probably waste 4 bytes of tail padding unless they are careful to pack small members immediately after the list head object. It will not be immediately clear from the code that valuable cache line space might be being wasted, so ``csd::no_size`` is generally preferred. For this reason, ``no_size`` is also the default template argument for ``SizeMember``, hence why it is unspecified in most of the later examples.
 
 Because the list's items are typically allocated from a pool allocator, there is usually a factory function which allocates items and places them on lists -- this is a natural place for the user's own size maintenance code.
 
@@ -264,7 +264,7 @@ Because the list's items are typically allocated from a pool allocator, there is
 Understanding the ``head`` vs ``fwd_head + proxy`` templates
 ================================================================
 
-Suppose you want to create a BDS singly-linked list (slist) head. You have two options:
+Suppose you want to create a CSD singly-linked list (slist) head. You have two options:
 
 1. Use the ``slist_head`` class template
 2. Use a combination of the ``slist_fwd_head`` and ``slist_proxy`` class templates
@@ -275,10 +275,10 @@ Consider this code from the example above:
 
    struct ListItem {
      int i;
-     bds::slist_entry<ListItem> link;
+     csd::slist_entry<ListItem> link;
    };
 
-   using list_t = bds::slist_head<
+   using list_t = csd::slist_head<
      ListItem,
      slist_entry_offset<offsetof(ListItem, link)>,
      std::size_t>;
@@ -289,7 +289,7 @@ Note that the ``offsetof`` macro requires ``ListItem`` to be a complete type. Th
 
    struct ListItem;
 
-   using list_t = bds::slist_head<
+   using list_t = csd::slist_head<
      ListItem,
      slist_entry_offset<offsetof(ListItem, link)>, // Error: offsetof into incomplete type
      std::size_t>;
@@ -297,10 +297,10 @@ Note that the ``offsetof`` macro requires ``ListItem`` to be a complete type. Th
    // Definition is below, but it's too late!
    struct ListItem {
      int i;
-     bds::slist_entry<ListItem> link;
+     csd::slist_entry<ListItem> link;
    };
 
-This restriction did not exist in the original ``queue(3)`` C library. In exchange, the ``queue(3)`` equivalent of the "entry access functor" (the name of the field for the "entry" object) has to be specified in almost *every* macro that accesses the list, e.g., the ``link`` in ``SLIST_INSERT_AFTER(item_before, item, link)``. BDS avoids this by baking the entry access details into the type definition, via a template argument. This is much friendlier API-wise, but requires the type to be complete.
+This restriction did not exist in the original ``queue(3)`` C library. In exchange, the ``queue(3)`` equivalent of the "entry access functor" (the name of the field for the "entry" object) has to be specified in almost *every* macro that accesses the list, e.g., the ``link`` in ``SLIST_INSERT_AFTER(item_before, item, link)``. CSD avoids this by baking the entry access details into the type definition, via a template argument. This is much friendlier API-wise, but requires the type to be complete.
 
 If a list head must be declared before the item type is complete, it can be declared using the corresponding ``fwd_head`` ("forward head") template, e.g., ``slist_fwd_head``. This template only requires the ``T`` and ``SizeMember`` template parameters. Note that although ``T`` is a required parameter, it can be an incomplete.
 
@@ -313,17 +313,17 @@ The following example illustrates this:
    struct ListItem; // Note: not complete yet
 
    struct S {
-     bds::stailq_fwd_head<ListItem, std::size_t> allItemsFwd; // Collection of ListItems
+     csd::stailq_fwd_head<ListItem, std::size_t> allItemsFwd; // Collection of ListItems
    };
 
    struct ListItem {
      int i;
-     bds::slist_entry<ListItem> link;
+     csd::slist_entry<ListItem> link;
    };
 
    // Now that ListItem is a complete type, define `list_proxy_t` as an
    // `slist_proxy` instead of `slist_head`.
-   using list_proxy_t = bds::slist_proxy<
+   using list_proxy_t = csd::slist_proxy<
        stailq_fwd_head<ListItem, std::size_t>,        // Type of the fwd head
        slist_entry_offset<offsetof(ListItem, link)>>; // Late-specified EntryAccess
 
@@ -355,19 +355,19 @@ As with the "head" versions, helper macros and alias templates are available tha
 
    struct ListItem {
      int i;
-     bds::slist_entry<ListItem> link;
+     csd::slist_entry<ListItem> link;
    };
 
-   using mylist_proxy_t = BDS_TAILQ_PROXY_OFFSET_T(ListItem, link);
+   using mylist_proxy_t = CSD_TAILQ_PROXY_OFFSET_T(ListItem, link);
 
    // or when using std::invoke:
 
-   using mylist_proxy_t = bds::tailq_proxy_cinvoke_t<&ListItem::link>;
+   using mylist_proxy_t = csd::tailq_proxy_cinvoke_t<&ListItem::link>;
 
 Are ``fwd_head`` instances movable?
 -----------------------------------
 
-For most BDS intrusive containers, the "forward head" types are `moveable <https://en.cppreference.com/w/cpp/concepts/Movable>`_, to permit code like this: [#lists-careful-moving]_
+For most CSD intrusive containers, the "forward head" types are `moveable <https://en.cppreference.com/w/cpp/concepts/Movable>`_, to permit code like this: [#lists-careful-moving]_
 
 .. code-block:: c++
 
@@ -377,7 +377,7 @@ For most BDS intrusive containers, the "forward head" types are `moveable <https
      T() = default;
      T(T &&) = default; // OK, `fwdItems` is movable
 
-     bds::slist_fwd_head<ListItem> fwdItems;
+     csd::slist_fwd_head<ListItem> fwdItems;
    };
 
 Unfortunately this cannot work for certain data structures, namely ``tailq_fwd_head``:
@@ -390,7 +390,7 @@ Unfortunately this cannot work for certain data structures, namely ``tailq_fwd_h
      T() = default;
      T(T &&) = default; // Error: tailq_fwd_head's move constructor is deleted
 
-     bds::tailq_fwd_head<ListItem> fwdItems;
+     csd::tailq_fwd_head<ListItem> fwdItems;
    };
 
 This is a consequence of a :ref:`tailq implementation detail <lists-tailq-circular-design>`, namely that tailq's are circular lists with the ``end()`` sentinel connecting the head to the tail.
@@ -407,16 +407,16 @@ To work around this limitation, the user must define a custom move constructor:
      T() = default;
      T(T &&) noexcept;
 
-     bds::tailq_fwd_head<ListItem> fwdItems;
+     csd::tailq_fwd_head<ListItem> fwdItems;
    };
 
    struct ListItem {
      int i;
-     bds::tailq_entry link;
+     csd::tailq_entry link;
    };
 
-   using list_proxy_t = bds::tailq_proxy<tailq_fwd_head<ListItem>,
-       bds::tailq_entry_offset<offsetof(ListItem, link)>>;
+   using list_proxy_t = csd::tailq_proxy<tailq_fwd_head<ListItem>,
+       csd::tailq_entry_offset<offsetof(ListItem, link)>>;
 
    T::T(T &&other) noexcept {
      list_proxy_t ourItems{this->fwdItems, list_proxy_t{other.fwdItems}};
@@ -434,7 +434,7 @@ To work around this limitation, the user must define a custom move constructor:
      assert(std::size(items1) == 0 && std::size(list_t{t2.fwdItems}) == 2); // OK
    }
 
-Understand the BDS list concepts
+Understand the CSD list concepts
 ================================
 
 Most of the implementation of an slist is contained in the class template ``slist_base``. Both ``slist_head`` and ``slist_proxy`` inherit the core slist API from this (`CRTP <https://en.wikipedia.org/wiki/Curiously_recurring_template_pattern>`_) base class. The only difference between ``slist_head`` and ``slist_proxy`` is that the former is more "elegant," at the expense of requiring complete types.
@@ -444,16 +444,16 @@ A function taking any kind of slist could be defined like this:
 .. code-block:: c++
 
    template <typename T, typename EntryAccess, typename SizeMember>
-   void f(bds::slist_base<T, EntryAccess, SizeMember> &anySList);
+   void f(csd::slist_base<T, EntryAccess, SizeMember> &anySList);
 
 With C++20 concepts, a better option is available:
 
 .. code-block:: c++
 
-   template <bds::SList ListType>
+   template <csd::SList ListType>
    void f(ListType &anySList);
 
-The single-argument concepts ``TailQ``, ``STailQ``, and ``SList`` evaluate to true if the given type argument is a BDS list of the appropriate kind. The concept ``SListOrQueue`` can be used to check for either ``STailQ`` or ``SList``, which have similar APIs because they are both singly-linked lists. All BDS lists satisfy the ``LinkedList`` concept.
+The single-argument concepts ``TailQ``, ``STailQ``, and ``SList`` evaluate to true if the given type argument is a CSD list of the appropriate kind. The concept ``SListOrQueue`` can be used to check for either ``STailQ`` or ``SList``, which have similar APIs because they are both singly-linked lists. All CSD lists satisfy the ``LinkedList`` concept.
 
 .. rubric:: Footnotes
 

@@ -1,6 +1,6 @@
-//==-- bds/utility.h - miscellaneous utility classes/functions --*- C++ -*-==//
+//==-- csd/utility.h - miscellaneous utility classes/functions --*- C++ -*-==//
 //
-//                     BSD Data Structures (BDS) Library
+//                Cyril Software Data Structures (CSD) Library
 //
 // This file is distributed under the 2-clause BSD Open Source License. See
 // LICENSE.TXT for details.
@@ -9,7 +9,7 @@
 /**
  * @file
  * @brief Contains generally useful "utility" classes and functions that are
- *     used in the implementation of other BDS classes.
+ *     used in the implementation of other CSD classes.
  *
  * Because of their general usefulness, these utilities are made available
  * "publically" in the nested "util" namespace, rather than living in a
@@ -17,15 +17,15 @@
  * however, they will be deprecated and removed.
  */
 
-#ifndef BDS_UTILITY_H
-#define BDS_UTILITY_H
+#ifndef CSD_UTILITY_H
+#define CSD_UTILITY_H
 
 #include <cstddef>
 #include <cstdint>
 #include <new>
 #include <type_traits>
 
-namespace bds::util {
+namespace csd::util {
 
 // FIXME [C++20] change std::ptrdiff_t to std::ssize_t
 constexpr std::ptrdiff_t type_not_found = -1;
@@ -63,15 +63,15 @@ public:
   tagged_ptr_union(tagged_ptr_union &&) = default;
 
   template <typename U>
-      requires type_index_v<U, Ts...> != type_not_found &&
-               alignof(U) >= sizeof...(Ts)
+      requires (type_index_v<U, Ts...> != type_not_found) &&
+               (alignof(U) >= sizeof...(Ts))
   tagged_ptr_union(U *u) noexcept :
       m_address{reinterpret_cast<std::uintptr_t>(u) | type_index_v<U, Ts...>} {}
 
   ~tagged_ptr_union() = default;
 
   template <typename U>
-      requires type_index_v<U, Ts...> != type_not_found 
+      requires (type_index_v<U, Ts...> != type_not_found)
   bool has_type() const noexcept {
     return (m_address & Mask) == type_index_v<U, Ts...>;
   }
@@ -90,14 +90,14 @@ public:
 
   template <typename U>
       requires (... || std::is_constructible_v<U *, Ts *>) &&
-               alignof(U) >= sizeof...(Ts)
+               (alignof(U) >= sizeof...(Ts))
   explicit operator U *() const noexcept {
     return reinterpret_cast<U *>(address());
   }
 
   template <typename U>
       requires (... || std::is_constructible_v<U *, Ts *>) &&
-               alignof(U) >= sizeof...(Ts)
+               (alignof(U) >= sizeof...(Ts))
   U *safe_cast() const noexcept {
     return (index() == type_index_v<U, Ts...>)
         ? reinterpret_cast<U *>(address())
@@ -108,8 +108,8 @@ public:
   tagged_ptr_union &operator=(tagged_ptr_union &&) = default;
 
   template <typename U>
-      requires type_index_v<U, Ts...> != type_not_found &&
-               alignof(U) >= sizeof...(Ts)
+      requires (type_index_v<U, Ts...> != type_not_found) &&
+               (alignof(U) >= sizeof...(Ts))
   tagged_ptr_union &operator=(U *u) noexcept {
     return *new(this) tagged_ptr_union{u};
   }
@@ -153,6 +153,6 @@ concept DerivedFromTemplate = requires(Instance instance) {
   derived_binds_to_base<Template>(instance);
 };
 
-} // End of namespace bds::util
+} // End of namespace csd::util
 
 #endif
