@@ -16,7 +16,7 @@ set(SPHINX_DOCTREE_DIR "${CMAKE_CURRENT_BINARY_DIR}/sphinx/_doctrees-html")
 add_custom_target(doxygen
     COMMAND "${DOXYGEN_EXECUTABLE}" "${CMAKE_CURRENT_BINARY_DIR}/doxygen/Doxyfile"
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/doxygen"
-    COMMENT "Generating csd doxygen documentation"
+    COMMENT "Generating CSG core doxygen documentation"
     VERBATIM)
 
 add_custom_target(doc

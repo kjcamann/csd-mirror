@@ -1,21 +1,26 @@
 #ifndef CSD_LIST_MODIFIER_TESTS_H
 #define CSD_LIST_MODIFIER_TESTS_H
 
+#include <cstring>
+#include <iterator>
+#include <memory>
+#include <span>
+#include <tuple>
 #include <catch2/catch.hpp>
 #include "list_test_util.h"
 
 template <typename T>
-constexpr bool is_base_u = false;
+constexpr bool is_stateful_extractor_list = false;
 
 template <template <typename> class LinkType>
-constexpr bool is_base_u<BaseU<LinkType>> = true;
+constexpr bool is_stateful_extractor_list<StatefulExtractorList<LinkType>> = true;
 
-template <csd::LinkedList ListType>
+template <csg::linked_list ListType>
 void basic_tests() {
   // Test the basic modifiers (single element insert and erase) and accessors
   // (size, empty, front, and back) of the list; also checks the functioning
   // of the iterators and begin(), end().
-  using E = ListType::value_type;
+  using E = CSG_TYPENAME ListType::value_type;
   E e[] = { {0}, {1} };
 
   ListType head;
@@ -23,7 +28,7 @@ void basic_tests() {
   REQUIRE( std::size(head) == 0 );
   REQUIRE( head.empty() );
   REQUIRE( head.begin() == head.end() );
-  if constexpr (csd::STailQ<ListType>)
+  if constexpr (csg::stailq<ListType>)
     REQUIRE( head.before_begin() == head.before_end() );
 
   // Perform first insertion, and check its effects
@@ -32,26 +37,26 @@ void basic_tests() {
   REQUIRE( std::size(head) == 1 );
   REQUIRE( !head.empty() );
   REQUIRE( std::addressof(head.front()) == &e[0] );
-  if constexpr (csd::TailQ<ListType> || csd::STailQ<ListType>)
+  if constexpr (csg::tailq<ListType> || csg::stailq<ListType>)
     REQUIRE( std::addressof(head.back()) == &e[0] );
 
   // Check iterator comparison with begin(), end() and the iter() method
   REQUIRE( it1 == head.begin() );
   REQUIRE( it1 != head.end() );
   REQUIRE( it1 == head.iter(&e[0]) );
-  if constexpr (csd::STailQ<ListType>)
+  if constexpr (csg::stailq<ListType>)
     REQUIRE( it1 == head.before_end() );
 
   // Check pre-increment iterator operators (and pre-decrement, for tailq's)
   REQUIRE( ++it1 == head.end() );
-  if constexpr (csd::TailQ<ListType>)
+  if constexpr (csg::tailq<ListType>)
     REQUIRE( --it1 == head.begin() );
 
   // Check post-{inc,dec}rement iterator operators
   it1 = head.begin();
   REQUIRE( it1++ == head.begin() );
   REQUIRE( it1 == head.end() );
-  if constexpr (csd::TailQ<ListType>) {
+  if constexpr (csg::tailq<ListType>) {
     REQUIRE( it1-- == head.end() );
     REQUIRE( it1 == head.begin() );
   }
@@ -60,7 +65,7 @@ void basic_tests() {
   it1 = head.begin();
   REQUIRE( std::addressof(*it1) == &e[0] );
   REQUIRE( it1.operator->() == &e[0] );
-  if constexpr (csd::STailQ<ListType>)
+  if constexpr (csg::stailq<ListType>)
     REQUIRE( std::addressof(*head.before_end()) == &e[0] );
 
   // Perform second insertion after the first element, and check its effects.
@@ -73,10 +78,10 @@ void basic_tests() {
   REQUIRE( it1 != it2 );
   REQUIRE( it2 == head.iter(&e[1]) );
 
-  if constexpr (csd::TailQ<ListType> || csd::STailQ<ListType>) {
+  if constexpr (csg::tailq<ListType> || csg::stailq<ListType>) {
     REQUIRE( std::addressof(head.back()) == &e[1] );
 
-    if constexpr (csd::STailQ<ListType>) {
+    if constexpr (csg::stailq<ListType>) {
       REQUIRE( it2 == head.before_end() );
       REQUIRE( std::addressof(*head.before_end()) == &e[1] );
     }
@@ -84,7 +89,7 @@ void basic_tests() {
 
   // Check iterator relationships
   REQUIRE( ++it1 == it2 );
-  if constexpr (csd::TailQ<ListType>) {
+  if constexpr (csg::tailq<ListType>) {
     REQUIRE( --it1 == head.begin() );
     REQUIRE( --it2 == it1 );
     REQUIRE( ++it2 == --head.end() );
@@ -99,10 +104,10 @@ void basic_tests() {
   REQUIRE( head.begin() == head.cbegin() );
   REQUIRE( head.end() == head.cend() );
 
-  if constexpr (!csd::TailQ<ListType>)
+  if constexpr (!csg::tailq<ListType>)
     REQUIRE( head.before_begin() == head.cbefore_begin() );
 
-  if constexpr (csd::STailQ<ListType>)
+  if constexpr (csg::stailq<ListType>)
     REQUIRE( head.before_end() == head.cbefore_end() );
 
   // Remove first element, and check its effects
@@ -115,23 +120,23 @@ void basic_tests() {
   REQUIRE( it2 == head.begin() );
   REQUIRE( head.iter(&e[1]) == head.begin() );
 
-  if constexpr (csd::TailQ<ListType> || csd::STailQ<ListType>) {
+  if constexpr (csg::tailq<ListType> || csg::stailq<ListType>) {
     REQUIRE( std::addressof(head.back()) == &e[1] );
 
-    if constexpr (csd::STailQ<ListType>)
+    if constexpr (csg::stailq<ListType>)
       REQUIRE( it2 == head.before_end() );
     else
       REQUIRE( it2 == --head.end() );
   }
 
-  if constexpr (!csd::TailQ<ListType>) {
+  if constexpr (!csg::tailq<ListType>) {
     // Erase the element after the last one; this should not damage the list
     // and should return an iterator to the end.
     auto after_it2 = head.erase_after(it2);
     REQUIRE( after_it2 == head.end() );
     REQUIRE( std::size(head) == 1 );
     REQUIRE( std::addressof(head.front()) == &e[1] );
-    if constexpr (csd::STailQ<ListType>) {
+    if constexpr (csg::stailq<ListType>) {
       REQUIRE( std::addressof(head.back()) == &e[1] );
     }
   }
@@ -143,7 +148,7 @@ void basic_tests() {
   REQUIRE( head.empty() );
   REQUIRE( head.begin() == head.end() );
   REQUIRE( after_it2 == head.end() );
-  if constexpr (csd::STailQ<ListType>)
+  if constexpr (csg::stailq<ListType>)
     REQUIRE( head.before_begin() == head.before_end() );
 
   // Perform a final insertion to check that the list is still usable after
@@ -151,16 +156,16 @@ void basic_tests() {
   insert_front(head, &e[0]);
 
   REQUIRE( std::size(head) == 1 );
-  REQUIRE( !std::empty(head) );
+  REQUIRE( !std::ranges::empty(head) );
   REQUIRE( std::addressof(*head.begin()) == &e[0] );
   REQUIRE( head.begin() != head.end() );
-  if constexpr (csd::STailQ<ListType>)
+  if constexpr (csg::stailq<ListType>)
     REQUIRE( head.before_end() == head.begin() );
 }
 
-template <csd::LinkedList ListType>
+template <csg::linked_list ListType>
 void clear_tests() {
-  using E = ListType::value_type;
+  using E = CSG_TYPENAME ListType::value_type;
   E e{0};
 
   ListType head;
@@ -177,7 +182,7 @@ void clear_tests() {
   REQUIRE( head.empty() );
   REQUIRE( head.begin() == head.end() );
   REQUIRE( std::size(head) == 0 );
-  if constexpr (csd::STailQ<ListType>)
+  if constexpr (csg::stailq<ListType>)
     REQUIRE( head.before_begin() == head.before_end() );
 
   // Ensure that the list is still in a working state (items can be
@@ -186,14 +191,14 @@ void clear_tests() {
   REQUIRE( std::size(head) == 1 );
   REQUIRE( !head.empty() );
   REQUIRE( std::addressof(head.front()) == &e );
-  if constexpr (csd::TailQ<ListType> || csd::STailQ<ListType>)
+  if constexpr (csg::tailq<ListType> || csg::stailq<ListType>)
     REQUIRE( std::addressof(head.back()) == &e );
 }
 
-template <csd::LinkedList ListType1, csd::LinkedList ListType2>
+template <csg::linked_list ListType1, csg::linked_list ListType2>
 void move_ctor_tests() {
-  using E = ListType1::value_type;
-  static_assert(std::is_same_v<E, typename ListType2::value_type>);
+  using E = CSG_TYPENAME ListType1::value_type;
+  static_assert(std::same_as<E, typename ListType2::value_type>);
 
   ListType1 head;
   E e{0};
@@ -206,19 +211,20 @@ void move_ctor_tests() {
   REQUIRE( std::size(movedHead) == 1 );
   REQUIRE( std::addressof(movedHead.front()) == &e );
   REQUIRE( !movedHead.empty() );
-  if constexpr (csd::TailQ<ListType2> || csd::STailQ<ListType2>)
+  if constexpr (csg::tailq<ListType2> || csg::stailq<ListType2>)
     REQUIRE( std::addressof(movedHead.back()) == &e );
 
   REQUIRE( head.empty() );
-  if constexpr (is_base_u<E>) {
-    REQUIRE( head.get_entry_accessor().movedFrom == true );
-    REQUIRE( movedHead.get_entry_accessor().movedFrom == false );
+  if constexpr (is_stateful_extractor_list<E>) {
+    REQUIRE( head.get_entry_extractor().movedFrom == true );
+    REQUIRE( movedHead.get_entry_extractor().movedFrom == false );
   }
 
   movedHead.clear();
 
-  if constexpr (csd::SListOrQueue<ListType1> && csd::SListOrQueue<ListType2> &&
-                TestProxy<ListType1> && TestProxy<ListType2>) {
+  if constexpr (csg::singly_linked_list<ListType1> &&
+                csg::singly_linked_list<ListType2> &&
+                test_proxy<ListType1> && test_proxy<ListType2>) {
     // Test that we can move-construct the fwd_head types; this is only allowed
     // for slist and stailq. tailq_fwd_head has a deleted move constructor
     // as explained in the documentation.
@@ -233,18 +239,18 @@ void move_ctor_tests() {
 
     REQUIRE( std::addressof(newHead.front()) == &e );
     REQUIRE( std::size(newHead) == 1 );
-    REQUIRE( !std::empty(newHead) );
+    REQUIRE( !std::ranges::empty(newHead) );
 
     REQUIRE( std::size(oldHead) == 0 );
-    REQUIRE( std::empty(oldHead) );
+    REQUIRE( std::ranges::empty(oldHead) );
     REQUIRE( oldHead.begin() == oldHead.end() );
   }
 }
 
 template <typename ListType1, typename ListType2>
 void move_assign_tests() {
-  using E = ListType1::value_type;
-  static_assert(std::is_same_v<E, typename ListType2::value_type>);
+  using E = CSG_TYPENAME ListType1::value_type;
+  static_assert(std::same_as<E, typename ListType2::value_type>);
 
   ListType1 oldHead;
   ListType2 newHead;
@@ -258,21 +264,22 @@ void move_assign_tests() {
   REQUIRE( std::size(newHead) == 1 );
   REQUIRE( std::addressof(newHead.front()) == &e );
   REQUIRE( !newHead.empty() );
-  if constexpr (csd::TailQ<ListType2> || csd::STailQ<ListType2>)
+  if constexpr (csg::tailq<ListType2> || csg::stailq<ListType2>)
     REQUIRE( std::addressof(newHead.back()) == &e );
 
   REQUIRE( std::size(oldHead) == 0 );
   REQUIRE( oldHead.empty() );
   REQUIRE( oldHead.begin() == oldHead.end() );
-  if constexpr (csd::STailQ<ListType1>)
+  if constexpr (csg::stailq<ListType1>)
     REQUIRE( oldHead.before_begin() == oldHead.before_end() );
-  if constexpr (is_base_u<E>) {
-    REQUIRE( oldHead.get_entry_accessor().movedFrom == true );
-    REQUIRE( newHead.get_entry_accessor().movedFrom == false );
+  if constexpr (is_stateful_extractor_list<E>) {
+    REQUIRE( oldHead.get_entry_extractor().movedFrom == true );
+    REQUIRE( newHead.get_entry_extractor().movedFrom == false );
   }
 
-  if constexpr (csd::SListOrQueue<ListType1> && csd::SListOrQueue<ListType2> &&
-                TestProxy<ListType1> && TestProxy<ListType2>) {
+  if constexpr (csg::singly_linked_list<ListType1> &&
+                csg::singly_linked_list<ListType2> &&
+                test_proxy<ListType1> && test_proxy<ListType2>) {
     // Test that we can move-assign the fwd_head types; the same comments apply
     // as in the move-construction tests.
     typename ListType1::fwd_head_type oldFwdHead;
@@ -287,30 +294,30 @@ void move_assign_tests() {
 
     REQUIRE( std::addressof(newHead.front()) == &e );
     REQUIRE( std::size(newHead) == 1 );
-    REQUIRE( !std::empty(newHead) );
+    REQUIRE( !std::ranges::empty(newHead) );
 
     REQUIRE( std::size(oldHead) == 0 );
-    REQUIRE( std::empty(oldHead) );
+    REQUIRE( std::ranges::empty(oldHead) );
     REQUIRE( oldHead.begin() == oldHead.end() );
   }
 }
 
-template <csd::LinkedList ListHeadType, csd::LinkedList ListProxyType>
+template <csg::linked_list ListHeadType, csg::linked_list ListProxyType>
 void move_tests() {
   SECTION("move_ctor.head_head") { move_ctor_tests<ListHeadType, ListHeadType>(); }
-  SECTION("move_ctor.cont_cont") { move_ctor_tests<ListProxyType, ListProxyType>(); }
-  SECTION("move_ctor.head_cont") { move_ctor_tests<ListHeadType, ListProxyType>(); }
-  SECTION("move_ctor.cont_head") { move_ctor_tests<ListProxyType, ListHeadType>(); }
+  SECTION("move_ctor.proxy_proxy") { move_ctor_tests<ListProxyType, ListProxyType>(); }
+  SECTION("move_ctor.head_proxy") { move_ctor_tests<ListHeadType, ListProxyType>(); }
+  SECTION("move_ctor.proxy_head") { move_ctor_tests<ListProxyType, ListHeadType>(); }
 
   SECTION("move_assign.head_head") { move_assign_tests<ListHeadType, ListHeadType>(); }
-  SECTION("move_assign.cont_cont") { move_assign_tests<ListProxyType, ListProxyType>(); }
-  SECTION("move_assign.head_cont") { move_assign_tests<ListHeadType, ListProxyType>(); }
-  SECTION("move_assign.cont_head") { move_assign_tests<ListProxyType, ListHeadType>(); }
+  SECTION("move_assign.proxy_proxy") { move_assign_tests<ListProxyType, ListProxyType>(); }
+  SECTION("move_assign.head_proxy") { move_assign_tests<ListHeadType, ListProxyType>(); }
+  SECTION("move_assign.proxy_head") { move_assign_tests<ListProxyType, ListHeadType>(); }
 }
 
-template <csd::LinkedList ListType>
+template <csg::linked_list ListType>
 void extra_ctor_tests() {
-  using E = ListType::value_type;
+  using E = CSG_TYPENAME ListType::value_type;
 
   E e[] = { {0}, {1}, {2} };
 
@@ -322,13 +329,29 @@ void extra_ctor_tests() {
     REQUIRE( std::size(head) == 3 );
 
     auto i = head.begin();
-
     REQUIRE( std::addressof(*i++) == &e[0] );
     REQUIRE( std::addressof(*i++) == &e[1] );
     REQUIRE( std::addressof(*i++) == &e[2] );
     REQUIRE( i == head.end() );
 
-    if constexpr (csd::STailQ<ListType>)
+    if constexpr (csg::stailq<ListType>)
+      REQUIRE( std::addressof(*head.before_end()) == &e[2] );
+  }
+
+  SECTION("ctor.range") {
+    E *insert[] = { &e[0], &e[1], &e[2] };
+
+    ListType head{std::span{insert}};
+
+    REQUIRE( std::size(head) == 3 );
+
+    auto i = head.begin();
+    REQUIRE( std::addressof(*i++) == &e[0] );
+    REQUIRE( std::addressof(*i++) == &e[1] );
+    REQUIRE( std::addressof(*i++) == &e[2] );
+    REQUIRE( i == head.end() );
+
+    if constexpr (csg::stailq<ListType>)
       REQUIRE( std::addressof(*head.before_end()) == &e[2] );
   }
 
@@ -338,29 +361,28 @@ void extra_ctor_tests() {
     REQUIRE( std::size(head) == 3 );
 
     auto i = head.begin();
-
     REQUIRE( std::addressof(*i++) == &e[0] );
     REQUIRE( std::addressof(*i++) == &e[1] );
     REQUIRE( std::addressof(*i++) == &e[2] );
     REQUIRE( i == head.end() );
 
-    if constexpr (csd::STailQ<ListType>)
+    if constexpr (csg::stailq<ListType>)
       REQUIRE( std::addressof(*head.before_end()) == &e[2] );
   }
 }
 
-template <csd::LinkedList ListType>
+template <csg::linked_list ListType>
 void bulk_insert_tests() {
-  using E = ListType::value_type;
+  using E = CSG_TYPENAME ListType::value_type;
 
   ListType head;
   E e[] = { {0}, {1}, {2} };
 
-  SECTION("bulk_insert.iterator_range") {
+  SECTION("bulk_insert.iterator_pair") {
     // Insert a single element, then use bulk insert to prepend elements in
     // front of it; this is slightly less trivial than bulk insertion into
     // an empty list.
-    insert_front(head, &e[2] );
+    insert_front(head, &e[2]);
     E *insert[] = { &e[0], &e[1] };
 
     // Tail queues return the first element of the insertion, whereas the
@@ -369,11 +391,34 @@ void bulk_insert_tests() {
     auto i = insert_front(head, std::begin(insert), std::end(insert));
     REQUIRE( std::size(head) == 3 );
 
-    if constexpr (csd::TailQ<ListType>)
+    if constexpr (csg::tailq<ListType>)
       REQUIRE( i == head.begin() );
     else {
       REQUIRE( std::addressof(*i) == &e[1] );
-      if constexpr (csd::STailQ<ListType>)
+      if constexpr (csg::stailq<ListType>)
+        REQUIRE( std::addressof(*head.before_end()) == &e[2] );
+      i = head.begin();
+    }
+
+    REQUIRE( std::addressof(*i++) == &e[0] );
+    REQUIRE( std::addressof(*i++) == &e[1] );
+    REQUIRE( std::addressof(*i++) == &e[2] );
+    REQUIRE( i == head.end() );
+  }
+
+  SECTION("bulk_insert.range") {
+    // Same test as above, but using bulk insertion of a range.
+    insert_front(head, &e[2]);
+    std::array<E *, 2> insert = { &e[0], &e[1] };
+
+    auto i = insert_front(head, insert);
+    REQUIRE( std::size(head) == 3 );
+
+    if constexpr (csg::tailq<ListType>)
+      REQUIRE( i == head.begin() );
+    else {
+      REQUIRE( std::addressof(*i) == &e[1] );
+      if constexpr (csg::stailq<ListType>)
         REQUIRE( std::addressof(*head.before_end()) == &e[2] );
       i = head.begin();
     }
@@ -390,11 +435,11 @@ void bulk_insert_tests() {
     auto i = insert_front(head, { &e[0], &e[1] });
     REQUIRE( std::size(head) == 3 );
 
-    if constexpr (csd::TailQ<ListType>)
+    if constexpr (csg::tailq<ListType>)
       REQUIRE( i == head.begin() );
     else {
       REQUIRE( std::addressof(*i) == &e[1] );
-      if constexpr (csd::STailQ<ListType>)
+      if constexpr (csg::stailq<ListType>)
         REQUIRE( std::addressof(*head.before_end()) == &e[2] );
       i = head.begin();
     }
@@ -416,7 +461,7 @@ void bulk_insert_tests() {
   // same as bulk insertion, but clears the list first.
 
   SECTION("assign.iterator_range") {
-    insert_front(head, &e[2] );
+    insert_front(head, &e[2]);
     E *insert[] = { &e[0], &e[1] };
 
     head.assign(std::begin(insert), std::end(insert));
@@ -428,12 +473,29 @@ void bulk_insert_tests() {
     REQUIRE( std::addressof(*i++) == &e[1] );
     REQUIRE( i == head.end() );
 
-    if constexpr (csd::STailQ<ListType>)
+    if constexpr (csg::stailq<ListType>)
+      REQUIRE( std::addressof(*head.before_end()) == &e[1] );
+  }
+
+  SECTION("assign.range") {
+    insert_front(head, &e[2]);
+    std::array<E *, 2> insert{ &e[0], &e[1] };
+
+    head.assign(insert);
+    REQUIRE( std::size(head) == 2 );
+
+    auto i = head.begin();
+
+    REQUIRE( std::addressof(*i++) == &e[0] );
+    REQUIRE( std::addressof(*i++) == &e[1] );
+    REQUIRE( i == head.end() );
+
+    if constexpr (csg::stailq<ListType>)
       REQUIRE( std::addressof(*head.before_end()) == &e[1] );
   }
 
   SECTION("assign.initializer_list") {
-    insert_front(head, &e[2] );
+    insert_front(head, &e[2]);
 
     head.assign({ &e[0], &e[1] });
     REQUIRE( std::size(head) == 2 );
@@ -444,14 +506,31 @@ void bulk_insert_tests() {
     REQUIRE( std::addressof(*i++) == &e[1] );
     REQUIRE( i == head.end() );
 
-    if constexpr (csd::STailQ<ListType>)
+    if constexpr (csg::stailq<ListType>)
       REQUIRE( std::addressof(*head.before_end()) == &e[1] );
   }
 
-  SECTION("assign.operator_form") {
-    // operator=(initializer_list<T *>) is syntactic sugar for assign, so we
-    // also test that here.
-    insert_front(head, &e[2] );
+  SECTION("assign.assign_operator_with_range") {
+    // operator=(range) is syntactic sugar for assign, so we also test that.
+    insert_front(head, &e[2]);
+    std::array<E *, 2> insert = { &e[0], &e[1] };
+
+    head = insert;
+    REQUIRE( std::size(head) == 2 );
+
+    auto i = head.begin();
+
+    REQUIRE( std::addressof(*i++) == &e[0] );
+    REQUIRE( std::addressof(*i++) == &e[1] );
+    REQUIRE( i == head.end() );
+
+    if constexpr (csg::stailq<ListType>)
+      REQUIRE( std::addressof(*head.before_end()) == &e[1] );
+  }
+
+  SECTION("assign.assign_operator_with_ilist") {
+    // As above, but for operator=(initializer_list<T *>).
+    insert_front(head, &e[2]);
 
     head = { &e[0], &e[1] };
     REQUIRE( std::size(head) == 2 );
@@ -462,39 +541,164 @@ void bulk_insert_tests() {
     REQUIRE( std::addressof(*i++) == &e[1] );
     REQUIRE( i == head.end() );
 
-    if constexpr (csd::STailQ<ListType>)
+    if constexpr (csg::stailq<ListType>)
       REQUIRE( std::addressof(*head.before_end()) == &e[1] );
   }
 }
 
-template <csd::LinkedList ListHeadType>
-void for_each_safe_tests() {
-  using E = ListHeadType::value_type;
-  ListHeadType head;
-  E *e[] = { new E{0}, new E{1}, new E{2} };
+template <csg::linked_list ListType>
+void bulk_erase_tests() {
+  using E = CSG_TYPENAME ListType::value_type;
 
-  insert_front(head, std::begin(e), std::end(e));
-  head.for_each_safe([&head] (E &item) {
-    erase_front(head);
-    E *const p = std::addressof(item);
+  ListType head;
+  E e[] = { {0}, {1}, {2} };
+  insert_front(head, { &e[0], &e[1], &e[2] });
 
-    // Placement new a dummy value over the top of the item to simulate
-    // it being deleted to verify that it was actually deleted
-    new(p) E{123};
-    std::memset(&p->next, 0, sizeof(typename ListHeadType::entry_type));
-  });
+  // Remove [e1, end), then check that the list is still valid and == [e0].
+  auto i = erase_after(head, head.begin(), head.end());
+  REQUIRE( std::size(head) == 1 );
+  REQUIRE( i == head.end() );
+  REQUIRE( std::addressof(*head.begin()) == &e[0] );
+  if constexpr (csg::stailq<ListType>)
+    REQUIRE( std::addressof(*head.before_end()) == &e[0] );
 
+  // Remove [e0] and check that the list is empty.
+  i = erase_front(head);
+  REQUIRE( i == head.end() );
   REQUIRE( head.empty() );
 
-  for (E *item : e) {
-    REQUIRE(item->i == 123);
-    delete item;
+  // Remove the empty range (begin, end) -- this is a no-op, so it must leave
+  // the list in a valid state.
+  i = erase_after(head, head.begin(), head.end());
+  REQUIRE( i == head.end() );
+  REQUIRE( head.empty() );
+  if constexpr (csg::stailq<ListType>)
+    REQUIRE( head.before_begin() == head.before_end() );
+
+  if constexpr (csg::singly_linked_list<ListType>) {
+    i = head.erase_after(head.before_begin(), head.end());
+    REQUIRE( i == head.end() );
+    REQUIRE( head.empty() );
+    if constexpr (csg::stailq<ListType>)
+      REQUIRE( head.before_begin() == head.before_end() );
+  }
+
+  // Check that list is still usable after empty range erase.
+  insert_front(head, &e[0]);
+  REQUIRE( std::size(head) == 1 );
+  REQUIRE( std::addressof(head.front()) == &e[0] );
+  if constexpr (requires(ListType L) { L.back(); })
+    REQUIRE( std::addressof(head.back()) == &e[0] );
+}
+
+template <csg::linked_list ListType>
+void for_each_safe_tests() {
+  using E = CSG_TYPENAME ListType::value_type;
+  ListType head;
+
+  SECTION("for_each_safe.deletion_safe") {
+    // Checks that the traversal is actually safe when destroying the current
+    // item in the iteration.
+    E *e[] = { new E{0}, new E{1}, new E{2} };
+
+    insert_front(head, std::begin(e), std::end(e));
+    head.for_each_safe([&head] (E &item) {
+      erase_front(head);
+      E *const itemAddr = std::addressof(item);
+
+      // Destroy the item, then placement new a dummy value over the top of the
+      // item to simulate it being deleted and its space reused. We'll check for
+      // this special value to verify that it was actually deleted. Also ensure
+      // the entry is reset to verify that it doesn't break list traversal.
+      item.~E();
+      auto &entry = head.get_entry_extractor()(*new(itemAddr) E{123});
+      entry = {};
+    });
+
+    REQUIRE( head.empty() );
+
+    for (E *item : e) {
+      REQUIRE( get_value(*item) == 123 );
+      delete item;
+    }
+  }
+
+  SECTION("for_each_safe.projection") {
+    // Test the range projection feature (this doesn't really test the "safe"
+    // aspect of this member like the above).
+    E e[] = { {0}, {1}, {2} };
+    insert_front(head, { &e[0], &e[1], &e[2] });
+
+    std::int64_t sum = 0;
+    head.for_each_safe([&sum] (const auto i) { sum += i; }, get_value<E>);
+    REQUIRE( sum == 3 );
   }
 }
 
-template <csd::LinkedList ListType1, csd::LinkedList ListType2>
+template <csg::linked_list ListType>
+void push_pop_tests() {
+  using E = CSG_TYPENAME ListType::value_type;
+  ListType head;
+
+  E e[] = { {0}, {1} };
+
+  insert_front(head, &e[1]);
+  REQUIRE( std::addressof(*head.begin()) == &e[1] );
+  REQUIRE( std::size(head) == 1 );
+  REQUIRE( !head.empty() );
+  REQUIRE( ++head.begin() == head.end() );
+  if constexpr (csg::stailq<ListType>)
+    REQUIRE( std::addressof(*head.before_end()) == &e[1] );
+
+  insert_front(head, &e[0]);
+  REQUIRE( std::size(head) == 2 );
+  REQUIRE( std::addressof(*head.begin()) == &e[0] );
+  if constexpr (csg::stailq<ListType>)
+    REQUIRE( std::addressof(*head.before_end()) == &e[1] );
+
+  head.pop_front();
+  REQUIRE( std::size(head) == 1 );
+  REQUIRE( std::addressof(*head.begin()) == &e[1] );
+  if constexpr (csg::stailq<ListType>)
+    REQUIRE( std::addressof(*head.before_end()) == &e[1] );
+
+  head.pop_front();
+  REQUIRE( head.empty() );
+  if constexpr (csg::stailq<ListType>)
+    REQUIRE( head.before_begin() == head.before_end() );
+
+  if constexpr (csg::stailq<ListType> || csg::tailq<ListType>) {
+    head.push_back(&e[0]);
+    REQUIRE( std::addressof(*head.begin()) == &e[0] );
+    REQUIRE( std::size(head) == 1 );
+    REQUIRE( !head.empty() );
+    REQUIRE( ++head.begin() == head.end() );
+    if constexpr (csg::stailq<ListType>)
+      REQUIRE( std::addressof(*head.before_end()) == &e[0] );
+
+    head.push_back(&e[1]);
+    REQUIRE( std::addressof(*++head.begin()) == &e[1] );
+    REQUIRE( std::size(head) == 2 );
+    if constexpr (csg::stailq<ListType>)
+      REQUIRE( std::addressof(*head.before_end()) == &e[1] );
+
+    if constexpr (csg::tailq<ListType>) {
+      head.pop_back();
+      REQUIRE( std::addressof(*head.begin()) == &e[0] );
+      REQUIRE( std::size(head) == 1 );
+      REQUIRE( !head.empty() );
+      REQUIRE( ++head.begin() == head.end() );
+
+      head.pop_back();
+      REQUIRE( head.empty() );
+      REQUIRE( head.begin() == head.end() );
+    }
+  }
+}
+
+template <csg::linked_list ListType1, csg::linked_list ListType2>
 void swap_lists() {
-  using E = ListType1::value_type;
+  using E = CSG_TYPENAME ListType1::value_type;
   static_assert(std::is_same_v<E, typename ListType2::value_type>);
 
   ListType1 head1;
@@ -510,14 +714,14 @@ void swap_lists() {
     REQUIRE( std::size(head1) == 2 );
     REQUIRE( std::addressof(*head1.begin()) == &e[1] );
     REQUIRE( std::addressof(*++head1.begin()) == &e[2] );
-    if constexpr (csd::TailQ<ListType1>)
+    if constexpr (csg::tailq<ListType1>)
       REQUIRE( std::addressof(*--head1.end()) == &e[2] );
-    if constexpr (csd::STailQ<ListType1>)
+    if constexpr (csg::stailq<ListType1>)
       REQUIRE( std::addressof(*head1.before_end()) == &e[2] );
 
     REQUIRE( std::size(head2) == 1 );
     REQUIRE( std::addressof(*head2.begin()) == &e[0] );
-    if constexpr (csd::STailQ<ListType2>)
+    if constexpr (csg::stailq<ListType2>)
       REQUIRE( std::addressof(*head2.before_end()) == &e[0] );
   }
 
@@ -533,12 +737,12 @@ void swap_lists() {
     REQUIRE( std::addressof(*i++) == &e[1] );
     REQUIRE( std::addressof(*i++) == &e[2] );
     REQUIRE( i == head2.end() );
-    if constexpr (csd::STailQ<ListType1>)
+    if constexpr (csg::stailq<ListType1>)
       REQUIRE( std::addressof(*head2.before_end()) == &e[2] );
   }
 }
 
-template <csd::LinkedList ListHeadType, csd::LinkedList ListProxyType>
+template <csg::linked_list ListHeadType, csg::linked_list ListProxyType>
 void swap_tests() {
   SECTION("same_type_head") { swap_lists<ListHeadType, ListHeadType>(); }
   SECTION("same_type_fwd") { swap_lists<ListProxyType, ListProxyType>(); }
@@ -546,9 +750,9 @@ void swap_tests() {
   SECTION("swap_from_fwd_head") { swap_lists<ListProxyType, ListHeadType>(); }
 }
 
-template <csd::SListOrQueue ListType>
+template <csg::singly_linked_list ListType>
 void find_predecessor_tests() {
-  using E = ListType::value_type;
+  using E = CSG_TYPENAME ListType::value_type;
 
   ListType head;
   E e[] = { {0}, {1} };
@@ -577,20 +781,20 @@ void find_predecessor_tests() {
     REQUIRE( found == true );
 
     std::tie(i, found) = head.find_predecessor_if(
-      [&e] (const E &item) { return std::addressof(item) == nullptr; });
+      [] (const E &item) { return std::addressof(item) == nullptr; });
     REQUIRE( i == ++head.begin() );
     REQUIRE( found == false );
-    if constexpr (csd::STailQ<ListType>)
+    if constexpr (csg::stailq<ListType>)
       REQUIRE( i == head.before_end() );
 
     head.clear();
 
     std::tie(i, found) = head.find_predecessor_if(
-      [&e] (const E &item) { return std::addressof(item) == nullptr; });
+      [] (const E &item) { return std::addressof(item) == nullptr; });
 
     REQUIRE( i == head.before_begin() );
     REQUIRE( found == false );
-    if constexpr (csd::STailQ<ListType>)
+    if constexpr (csg::stailq<ListType>)
       REQUIRE( i == head.before_end() );
   }
 
@@ -603,14 +807,13 @@ void find_predecessor_tests() {
     REQUIRE( erased == &e[0] );
     REQUIRE( std::addressof(head.front()) == &e[1] );
     REQUIRE( next == head.begin() );
-    if constexpr (csd::STailQ<ListType>)
+    if constexpr (csg::stailq<ListType>)
       REQUIRE( std::addressof(head.back()) == &e[1] );
   }
 }
 
-// FIXME [C++20]: P0634
 template <typename ProxyType>
-void proxy_test_helper(ProxyType head, typename ProxyType::value_type *e) {
+void proxy_test_helper(ProxyType head, CSG_TYPENAME ProxyType::pointer e) {
   insert_front(head, e);
   REQUIRE( std::size(head) == 2 );
 }
@@ -626,7 +829,7 @@ void proxy_tests() {
   FwdHeadType fwdHead;
   ProxyType head{fwdHead};
 
-  using E = ProxyType::value_type;
+  using E = CSG_TYPENAME ProxyType::value_type;
   E e[] = { {0}, {1} };
 
   insert_front(head, &e[0]);

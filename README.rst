@@ -3,7 +3,7 @@
 What is CSD?
 ============
 
-CSD contains C++20 implementations of several well-known data structures from the `BSD family of operating systems <https://en.wikipedia.org/wiki/Berkeley_Software_Distribution>`_. [1]_
+CSD contains C++23 implementations of several well-known data structures from the `BSD family of operating systems <https://en.wikipedia.org/wiki/Berkeley_Software_Distribution>`_. [1]_
 
 It provides the following:
 
@@ -15,14 +15,16 @@ It provides the following:
 * A ring based shared memory allocator based on DPDK's `librte_mempool <https://doc.dpdk.org/guides/prog_guide/mempool_lib.html>`_
 * A read/writer mutex that keeps track of all readers for debugging and robust deadlock detection, based on FreeBSD's `rmlock <https://www.freebsd.org/cgi/man.cgi?query=rmlock&sektion=9>`_ and conforming to the C++17 threading library concepts.
 
-CSD is an acronym for "Cyril Software Data Structures"; it is used in other open source releases from the Cyril Software Group.
+CSD is an acronym for "Cyril Software Data Structures"; it is used in other open source releases from the Cyril Software Group (CSG). Because it provides core functionality to other CSG projects, its classes are defined directly in ``namespace csg`` so they can be referenced via unqualified names in other CSG code.
+
+When C++20 modules support improves in both gcc and clang, the name CSD will go away and it will be distributed as the module ``csg.core``.
 
 .. warning::
 
    This is an alpha release of CSD, made so that other early-stage projects could source it from github. Some of the libraries described above are not included in this alpha release, and the libraries that *are* included do not have stable APIs or complete documentation.
 
 .. warning::
-   This alpha release of CSD requires C++ concepts, and only compiles with the experimental support for the concepts technical specification in gcc. For this same reason, the reference documentation is often incorrect or missing, since the concept declarations cannot be parsed by doxygen.
+   This alpha release of CSD uses C++20 concepts. For this reason, the reference documentation is often incorrect or missing, since the concept declarations cannot be parsed by doxygen.
 
 Why should I care about this library?
 =====================================
@@ -61,7 +63,9 @@ And finally, here they are!
 How do I install CSD?
 =====================
 
-CSD is a header-only library, so there is little to do. The included CMake build system is only needed to build the test suite and the Sphinx documentation, but it does include an ``install`` target which will copy the CSD headers, if you wish to use that. To build the Sphinx documentation, you must also install `doxygen <https://www.doxygen.org>`_, `breathe <https://breathe.readthedocs.io>`_, the `"Read the Docs" Sphinx theme <https://sphinx-rtd-theme.readthedocs.io/en/latest>`_, and `Sphinx itself <https://www.sphinx-doc.org/en/stable/>`_. Building the test suite will use CMake's `ExternalProject <https://cmake.org/cmake/help/latest/module/ExternalProject.html>`_ command to fetch the `Catch2 <https://github.com/catchorg/Catch2>`_ unit testing framework from Github, so it requires an Internet connection.
+CSD is a header-only library, so there is little to do. The one exception is if you enable assertions in the library by ``#define``\ ing ``CSG_DEBUG_LEVEL`` to ``1`` via the C preprocessor; in that case, the library will emit calls to an ``extern "C"`` free function called ``csg_assert_function`` which you must provide to the linker. No default definition is provided because the "weak linkage" concept is not portable to Windows. See the ``driver.cpp`` file in the test suite for an example of a simple assertion function that prints to stderr, then calls `std::terminate <https://en.cppreference.com/w/cpp/error/terminate>`_.
+
+The included CMake build system is only needed to build the test suite and the Sphinx documentation, but it does include an ``install`` target which will copy the CSD headers, if you wish to use that. To build the Sphinx documentation, you must also install `doxygen <https://www.doxygen.org>`_, `breathe <https://breathe.readthedocs.io>`_, the `"Read the Docs" Sphinx theme <https://sphinx-rtd-theme.readthedocs.io/en/latest>`_, and `Sphinx itself <https://www.sphinx-doc.org/en/stable/>`_. Building the test suite will use CMake's `ExternalProject <https://cmake.org/cmake/help/latest/module/ExternalProject.html>`_ command to fetch the `Catch2 <https://github.com/catchorg/Catch2>`_ unit testing framework from Github, so it requires an Internet connection.
 
 .. csd-readme-include-end
 

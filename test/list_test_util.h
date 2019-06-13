@@ -1,64 +1,96 @@
 #ifndef CSD_LIST_TEST_UTIL_H
 #define CSD_LIST_TEST_UTIL_H
 
+#include <algorithm>
+#include <compare>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <iterator>
 #include <memory>
 #include <random>
+#include <ranges>
 #include <utility>
 #include <vector>
 
-#include <csd/listfwd.h>
+#include <csg/core/listfwd.h>
+#include <csg/core/utility.h>
 
-template <template <typename> class LinkEntryType>
-struct BaseS {
+template <typename T, typename O>
+concept compatible_list = std::ranges::input_range<T> && csg::linked_list<T> &&
+    std::same_as<typename T::value_type, typename O::value_type> &&
+    std::same_as<typename T::entry_extractor_type, typename O::entry_extractor_type>;
+
+// A list whose linkage entry is a directly-accessible member variable of the
+// list.
+template <template <typename> class EntryType>
+struct DirectEntryList {
   std::int64_t i;
-  LinkEntryType<BaseS> next;
+  EntryType<DirectEntryList> next;
+
+  std::weak_ordering operator<=>(const DirectEntryList &other) const noexcept {
+    return i <=> other.i;
+  }
+
+  bool operator==(const DirectEntryList &other) const noexcept {
+    return (*this <=> other) == std::weak_ordering::equivalent;
+  }
 };
 
-template <template <typename> class LinkEntryType>
-class BaseT {
+// A list whose linkage entry is extracted by calling the "next" accessor
+// member function
+template <template <typename> class EntryType>
+class AccessorEntryList {
 public:
-  BaseT(std::int64_t i) noexcept : _i{i} {}
+  AccessorEntryList(std::int64_t i) noexcept : _i{i} {}
 
   std::int64_t &i() noexcept { return _i; }
-  LinkEntryType<BaseT> &next() noexcept { return _next; }
+  const std::int64_t &i() const noexcept { return _i; }
+  EntryType<AccessorEntryList> &next() noexcept { return _next; }
+
+  std::weak_ordering operator<=>(const AccessorEntryList&other) const noexcept {
+    return _i <=> other._i;
+  }
+
+  bool operator==(const AccessorEntryList &other) const noexcept {
+    return (*this <=> other) == std::weak_ordering::equivalent;
+  }
 
 private:
   std::int64_t _i;
-  LinkEntryType<BaseT> _next;
+  EntryType<AccessorEntryList> _next;
 };
 
+// A list
 template <template <typename> class>
-class BaseU;
+class StatefulExtractorList;
 
-template <template <typename> class LinkEntryType>
-class StatefulAccessorU {
+template <template <typename> class EntryType>
+class StatefulExtractor {
 public:
-  StatefulAccessorU() noexcept : numAccesses{0}, movedFrom{false} {}
+  StatefulExtractor() noexcept : numAccesses{0}, movedFrom{false} {}
 
-  StatefulAccessorU(const StatefulAccessorU &) = delete;
+  StatefulExtractor(const StatefulExtractor &) = delete;
 
-  StatefulAccessorU(StatefulAccessorU &&other) noexcept : movedFrom{false} {
+  StatefulExtractor(StatefulExtractor &&other) noexcept : movedFrom{false} {
     numAccesses = other.numAccesses;
     other.numAccesses = 0;
     other.movedFrom = true;
   }
 
-  ~StatefulAccessorU() = default;
+  ~StatefulExtractor() = default;
 
-  StatefulAccessorU &operator=(const StatefulAccessorU &) = delete;
+  StatefulExtractor &operator=(const StatefulExtractor &) = delete;
 
-  StatefulAccessorU &operator=(StatefulAccessorU &&other) noexcept {
+  StatefulExtractor &operator=(StatefulExtractor &&other) noexcept {
     numAccesses = other.numAccesses;
     other.numAccesses = 0;
     other.movedFrom = true;
     return *this;
   }
 
-  LinkEntryType<BaseU<LinkEntryType>>
-  &operator()(BaseU<LinkEntryType> &u) noexcept {
+  EntryType<StatefulExtractorList<EntryType>>
+  &operator()(StatefulExtractorList<EntryType> &u) noexcept {
     ++numAccesses;
     return u._next;
   }
@@ -67,22 +99,32 @@ public:
   bool movedFrom;
 };
 
-template <template <typename> class LinkEntryType>
-class BaseU {
+template <template <typename> class EntryType>
+class StatefulExtractorList {
 public:
-  using accessor_type = StatefulAccessorU<LinkEntryType>;
+  using extractor_type = StatefulExtractor<EntryType>;
 
-  BaseU(std::int64_t i) noexcept : _i{i} {}
+  StatefulExtractorList(std::int64_t i) noexcept : _i{i} {}
+  std::int64_t &i() noexcept { return _i; }
+  const std::int64_t &i() const noexcept { return _i; }
+
+  std::weak_ordering operator<=>(const StatefulExtractorList &other) const noexcept {
+    return _i <=> other._i;
+  }
+
+  bool operator==(const StatefulExtractorList &other) const noexcept {
+    return (*this <=> other) == std::weak_ordering::equivalent;
+  }
 
 private:
-  friend class StatefulAccessorU<LinkEntryType>;
+  friend class StatefulExtractor<EntryType>;
   std::int64_t _i;
-  LinkEntryType<BaseU> _next;
+  EntryType<StatefulExtractorList> _next;
 };
 
 // Ordinarily a "fwd_head" type (e.g., tailq_fwd_head) is used to declare a
-// list head when the entry accessor cannot be not defined yet. Somewhere
-// else in the code (after the accessor can be defined), the corresponding
+// list head when the entry extractor cannot be not defined yet. Somewhere
+// else in the code (after the extractor can be defined), the corresponding
 // proxy type is used. To ease the testing of the "fwd_head" pattern, we
 // make it more like the "head" style classes, in that a single declaration
 // declares both the fwd_head object and exposes the interface of the proxy,
@@ -92,7 +134,8 @@ private:
 template <typename ListProxyType>
 struct list_test_proxy : public ListProxyType {
 public:
-  using fwd_head_type = ListProxyType::fwd_head_type;
+  using fwd_head_type = CSG_TYPENAME ListProxyType::fwd_head_type;
+  using entry_extractor_type = CSG_TYPENAME ListProxyType::entry_extractor_type;
   using list_proxy_type = ListProxyType;
 
   list_test_proxy() noexcept : ListProxyType{ctorFwdHead()} {}
@@ -102,19 +145,41 @@ public:
   list_test_proxy(list_test_proxy &&other) noexcept
       : ListProxyType{ctorFwdHead(), std::move(other)} {}
 
-  template <csd::CompressedSize S, typename D>
-  list_test_proxy(typename ListProxyType::template other_list_t<S, D> &&other) noexcept
+  template <compatible_list<ListProxyType> O>
+  list_test_proxy(O &&other) noexcept
       : ListProxyType{ctorFwdHead(), std::move(other)} {}
 
-  template <typename InputIt, typename... Ts>
-  list_test_proxy(InputIt first, InputIt last, Ts &&...vs) noexcept
-      : ListProxyType{ctorFwdHead(), first, last, std::forward<Ts>(vs)...} {}
+  template <std::input_iterator InputIt, std::sentinel_for<InputIt> Sentinel>
+  list_test_proxy(InputIt first, Sentinel last) noexcept
+      : ListProxyType{ctorFwdHead(), first, last} {}
 
-  template <typename... Ts>
-  list_test_proxy(std::initializer_list<typename ListProxyType::value_type *> ilist, Ts &&...vs) noexcept
-      : ListProxyType{ctorFwdHead(), ilist, std::forward<Ts>(vs)...} {}
+  template <std::ranges::input_range Range, typename... Ts>
+  list_test_proxy(Range &r, Ts &&...vs) noexcept
+      : ListProxyType{ctorFwdHead(), r, std::forward<Ts>(vs)...} {}
 
-  ~list_test_proxy() = default;
+  template <std::ranges::input_range Range, typename... Ts>
+  list_test_proxy(const Range &r, Ts &&...vs) noexcept
+      : ListProxyType{ctorFwdHead(), r, std::forward<Ts>(vs)...} {}
+
+  list_test_proxy(std::initializer_list<typename ListProxyType::pointer> ilist) noexcept
+      : ListProxyType{ctorFwdHead(), ilist} {}
+
+  template <std::input_iterator InputIt, std::sentinel_for<InputIt> Sentinel,
+            csg::util::can_direct_initialize<entry_extractor_type> U>
+  list_test_proxy(InputIt first, Sentinel last, U &&u) noexcept
+      : ListProxyType{ctorFwdHead(), first, last, std::forward<U>(u)} {}
+
+  template <csg::util::can_direct_initialize<entry_extractor_type> U>
+  list_test_proxy(std::initializer_list<typename ListProxyType::pointer> ilist,
+                  U &&u) noexcept
+      : ListProxyType{ctorFwdHead(), ilist, std::forward<U>(u)} {}
+
+  ~list_test_proxy() {
+    auto *const pFwdHead = reinterpret_cast<fwd_head_type *>(fwdHeadBuf);
+    pFwdHead->~fwd_head_type();
+  }
+
+  using ListProxyType::operator=;
 
   list_test_proxy &operator=(const list_test_proxy &) = delete;
 
@@ -123,7 +188,23 @@ public:
     return *this;
   }
 
-  list_test_proxy &operator=(std::initializer_list<typename ListProxyType::value_type *> ilist) noexcept {
+  template <std::ranges::input_range Range>
+      requires std::constructible_from<typename ListProxyType::pointer,
+                                       std::ranges::range_reference_t<Range>>
+  list_test_proxy &operator=(Range &r) noexcept {
+    this->ListProxyType::operator=(r);
+    return *this;
+  }
+
+  template <std::ranges::input_range Range>
+      requires std::constructible_from<typename ListProxyType::pointer,
+                                       std::ranges::range_reference_t<Range>>
+  list_test_proxy &operator=(const Range &r) noexcept {
+    this->ListProxyType::operator=(r);
+    return *this;
+  }
+
+  list_test_proxy &operator=(std::initializer_list<typename ListProxyType::pointer> ilist) noexcept {
     this->ListProxyType::operator=(ilist);
     return *this;
   }
@@ -140,62 +221,92 @@ private:
   }
 };
 
-// FIXME [C++20]: T was originally declared `csd::LinkedList T` rather than
-// typename and then adding csd::LinkedList<T> as a requirement; gcc accepted
-// but clang does not. clang bug?
 template <typename T>
-concept TestProxy = csd::LinkedList<T> && requires {
+concept test_proxy = csg::linked_list<T> && requires {
   typename T::fwd_head_type;
   typename T::list_proxy_type;
 };
 
-// FIXME [docs]: explain why we can't use push_front here
-template <csd::SListOrQueue ListType, typename S>
+// FIXME [docs]: explain why we can't use push_front here in impl. docs
+template <csg::singly_linked_list ListType, typename S>
 auto insert_front(ListType &L, S *s) noexcept {
   return L.insert_after(L.before_begin(), s);
 }
 
-template <csd::SListOrQueue ListType, typename InputIt>
-auto insert_front(ListType &L, InputIt begin, InputIt end) noexcept {
+template <csg::singly_linked_list ListType, std::input_iterator InputIt,
+          std::sentinel_for<InputIt> Sentinel>
+auto insert_front(ListType &L, InputIt begin, Sentinel end) noexcept {
   return L.insert_after(L.before_begin(), begin, end);
 }
 
-template <csd::SListOrQueue ListType>
+template <csg::singly_linked_list ListType, std::ranges::input_range Range>
+auto insert_front(ListType &L, Range r) noexcept {
+  return L.insert_after(L.before_begin(), r);
+}
+
+template <csg::singly_linked_list ListType>
 auto insert_front(ListType &L, std::initializer_list<typename ListType::pointer> i) noexcept {
   return L.insert_after(L.before_begin(), i);
 }
 
-template <csd::TailQ ListType, typename S>
+template <csg::tailq ListType, typename S>
 auto insert_front(ListType &L, S *s) noexcept {
   return L.insert(L.begin(), s);
 }
 
-template <csd::TailQ ListType, typename InputIt>
-auto insert_front(ListType &L, InputIt begin, InputIt end) noexcept {
+template <csg::tailq ListType, std::input_iterator InputIt,
+          std::sentinel_for<InputIt> Sentinel>
+auto insert_front(ListType &L, InputIt begin, Sentinel end) noexcept {
   return L.insert(L.begin(), begin, end);
 }
 
-template <csd::TailQ ListType>
+template <csg::tailq ListType, std::ranges::input_range Range>
+auto insert_front(ListType &L, Range r) noexcept {
+  return L.insert(L.begin(), r);
+}
+
+template <csg::tailq ListType>
 auto insert_front(ListType &L, std::initializer_list<typename ListType::pointer> i) noexcept {
   return L.insert(L.begin(), i);
 }
 
-// FIXME [C++20] more bugs in clang implementation of P0634?
-template <csd::SListOrQueue ListType, typename S>
-auto insert_after(ListType &L, typename ListType::const_iterator i, S *s) noexcept {
+template <csg::singly_linked_list ListType>
+auto insert_after(ListType &L, CSG_TYPENAME ListType::const_iterator i,
+                  CSG_TYPENAME ListType::pointer s) noexcept {
   return L.insert_after(i, s);
 }
 
-template <csd::TailQ ListType, typename S>
-auto insert_after(ListType &L, typename ListType::const_iterator i, S *s) noexcept {
+template <csg::tailq ListType>
+auto insert_after(ListType &L, CSG_TYPENAME ListType::const_iterator i,
+                  CSG_TYPENAME ListType::pointer s) noexcept {
   return L.insert(std::next(i), s);
 }
 
-template <csd::SListOrQueue ListType>
-auto erase_front(ListType &L) { return L.erase_after(L.before_begin()); }
+template <csg::singly_linked_list ListType>
+auto erase_front(ListType &L) noexcept { return L.erase_after(L.before_begin()); }
 
-template <csd::TailQ ListType>
-auto erase_front(ListType &L) { return L.erase(L.begin()); }
+template <csg::tailq ListType>
+auto erase_front(ListType &L) noexcept { return L.erase(L.begin()); }
+
+template <csg::singly_linked_list ListType>
+auto erase_after(ListType &L, CSG_TYPENAME ListType::const_iterator begin,
+                 CSG_TYPENAME ListType::const_iterator end) noexcept {
+  return L.erase_after(begin, end);
+}
+
+template <csg::tailq ListType>
+auto erase_after(ListType &L, CSG_TYPENAME ListType::const_iterator begin,
+                 CSG_TYPENAME ListType::const_iterator end) noexcept {
+  return L.erase(++begin, end);
+}
+
+template <typename T>
+std::int64_t get_value(const T &t) {
+  if constexpr (requires {t.i();})
+    return t.i();
+  else
+    return t.i;
+}
 
 // Generate a random sequence of std::int64_t values of the given size and
 // having a uniform distribution in the internal [min, max]
@@ -259,34 +370,38 @@ populateSortedList(ListType &list, std::size_t size, std::int64_t min,
 
 template <typename ListType>
 void destroyList(ListType &list) noexcept {
-  csd::for_each_safe(list, [](auto &v) { delete std::addressof(v); });
+  csg::for_each_safe(list, [](auto &v) { delete std::addressof(v); });
 }
 
-// <algorithm> offers `std::is_sorted` to check if elements are sorted, but
-// this is not enough for correctness testing; mistakes in algorithms like
+// <algorithm> offers `std::ranges::is_sorted` to check if elements are sorted,
+// but this is not enough for correctness testing; mistakes in algorithms like
 // in-place list merge sort often leave the resulting list sorted, but elements
-// are missing (i.e., the links are not properly maintained). This counts the
+// are missing (i.e., the links were not properly maintained). This counts the
 // items in the list to verify no elements were "lost." It returns of a tuple
 // of (in_order, correct_size).
-template <typename ForwardIt, typename Compare>
+template <std::ranges::forward_range R, class Proj = std::identity,
+          std::indirect_strict_weak_order<
+            std::projected<std::ranges::iterator_t<R>, Proj>
+          > Compare = std::ranges::less>
 std::pair<bool, bool>
-is_sorted_check(ForwardIt begin, ForwardIt end, Compare comp,
-                std::size_t size) noexcept {
-  if (begin == end)
-    return { true, size == 0 };
+is_sorted_check(R &&r, std::size_t size, Compare comp = {}, Proj proj = {}) {
+  if (std::ranges::empty(r))
+    return {true, size == 0};
 
-  ForwardIt prev = begin++;
+  auto cur = std::ranges::begin(r);
+  const auto end = std::ranges::end(r);
   std::size_t count = 1;
 
-  while (begin != end) {
-    if (comp(*begin, *prev))
-      return { false, false };
+  auto prev = cur;
+  while (++cur != end) {
+    if (std::invoke(comp, std::invoke(proj, *cur), std::invoke(proj, *prev)))
+      return {false, false};
 
     ++count;
-    prev = begin++;
+    prev = cur;
   }
 
-  return { true, count == size };
+  return {true, count == size};
 }
 
 #endif

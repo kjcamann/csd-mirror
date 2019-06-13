@@ -1,69 +1,89 @@
-#include <algorithm>
-#include <cstring>
+#include <cstddef>
+#include <cstdint>
 #include <type_traits>
 
 #include <catch2/catch.hpp>
-#include <csd/stailq.h>
+#include <csg/core/stailq.h>
 
 #include "list_modifier_tests.h"
 #include "list_operation_tests.h"
 
-using namespace csd;
+using namespace csg;
 
-using S = BaseS<stailq_entry>;
-using T = BaseT<stailq_entry>;
-using U = BaseU<stailq_entry>;
+// See the comments in slist_tests.cpp for an explanation of these types.
+using D = DirectEntryList<stailq_entry>;
+using A = AccessorEntryList<stailq_entry>;
+using S = StatefulExtractorList<stailq_entry>;
 
-using stq_head_t = CSD_STAILQ_HEAD_OFFSET_T(S, next);
-using stq_head_inline_t = CSD_STAILQ_HEAD_OFFSET_T(S, next, std::size_t);
-using stq_head_invoke_t = stailq_head_cinvoke_t<&T::next>;
-using stq_head_stateful_t = stailq_head<U, U::accessor_type>;
+using stq_head_t = CSG_STAILQ_HEAD_OFFSET_T(D, next);
+using stq_head_inline_t = CSG_STAILQ_HEAD_OFFSET_T(D, next, std::size_t);
+using stq_head_invoke_t = stailq_head_cinvoke_t<&A::next>;
+using stq_head_stateful_t = stailq_head<S, S::extractor_type>;
 
-using stq_fwd_head_t = stailq_fwd_head<S>;
-using stq_proxy_t = CSD_STAILQ_PROXY_OFFSET_T(S, next);
-using stq_proxy_inline_t = CSD_STAILQ_PROXY_OFFSET_T(S, next, std::size_t);
-using stq_proxy_stateful_t = stailq_proxy<stailq_fwd_head<U>, U::accessor_type>;
+using stq_fwd_head_t = stailq_fwd_head<D>;
+using stq_proxy_t = CSG_STAILQ_PROXY_OFFSET_T(D, next);
+using stq_proxy_inline_t = CSG_STAILQ_PROXY_OFFSET_T(D, next, std::size_t);
+using stq_proxy_stateful_t = stailq_proxy<stailq_fwd_head<S>, S::extractor_type>;
 using stq_test_proxy_t = list_test_proxy<stq_proxy_t>;
 using stq_test_proxy_inline_t = list_test_proxy<stq_proxy_inline_t>;
 using stq_test_proxy_stateful_t = list_test_proxy<stq_proxy_stateful_t>;
 
 // Compile-time tests of list traits classes.
-static_assert(STailQ<stq_head_t>);
-static_assert(STailQ<stq_proxy_t>);
-static_assert(STailQ<stq_test_proxy_t>);
+static_assert(stailq<stq_head_t>);
+static_assert(stailq<stq_proxy_t>);
+static_assert(stailq<stq_test_proxy_t>);
 
-static_assert(!STailQ<stq_fwd_head_t>);
-static_assert(!STailQ<int>);
+static_assert(!stailq<stq_fwd_head_t>);
+static_assert(!stailq<int>);
 
-static_assert(!TailQ<stq_head_t>);
-static_assert(!TailQ<stq_proxy_t>);
+static_assert(!tailq<stq_head_t>);
+static_assert(!tailq<stq_proxy_t>);
 
-TEST_CASE("stailq.basic.offset", "[stailq][basic][offset]") {
-  basic_tests<stq_head_t>();
+template <typename T>
+struct extended_entry_inherit : stailq_entry<T> {
+  int extra;
+};
+
+template <typename T>
+struct extended_entry_member {
+  stailq_entry<T> entry;
+  int extra;
+};
+
+using InheritD = DirectEntryList<extended_entry_inherit>;
+using ExtendD = DirectEntryList<extended_entry_member>;
+
+using stq_head_entry_inherit_t = stailq_head_cinvoke_t<&InheritD::next>;
+using stq_head_entry_extend_t = CSG_STAILQ_HEAD_OFFSET_T(ExtendD, next.entry);
+
+static_assert(std::is_standard_layout_v<stq_head_t>);
+static_assert(std::is_standard_layout_v<stq_head_inline_t>);
+static_assert(std::is_standard_layout_v<stq_head_invoke_t>);
+static_assert(std::is_standard_layout_v<stq_head_stateful_t>);
+
+TEMPLATE_TEST_CASE("stailq.small_size", "[stailq][small_size][template]",
+  stq_head_t, stq_head_invoke_t, stq_head_entry_inherit_t, stq_head_entry_extend_t) {
+  // Ensure [[no_unique_address]] and compressed_invocable_ref are doing
+  // what we expect, so that stailq heads are the size of two pointers, and
+  // iterators are pointer-sized.
+  REQUIRE( sizeof(TestType) == 2 * sizeof(std::uintptr_t) );
+  REQUIRE( sizeof(typename TestType::iterator) == sizeof(std::uintptr_t) );
+  REQUIRE( sizeof(typename TestType::const_iterator) == sizeof(std::uintptr_t) );
 }
 
-TEST_CASE("stailq.basic.offset_inline_size", "[stailq][basic][offset]") {
-  basic_tests<stq_head_inline_t>();
+TEMPLATE_TEST_CASE("stailq.basic", "[stailq][basic][template]", stq_head_t,
+    stq_head_inline_t, stq_head_invoke_t, stq_test_proxy_t,
+    stq_head_entry_inherit_t, stq_head_entry_extend_t, stq_head_stateful_t) {
+  basic_tests<TestType>();
 }
 
-TEST_CASE("stailq.basic.member_invoke", "[stailq][basic][member_invoke]") {
-  basic_tests<stq_head_invoke_t>();
+TEMPLATE_TEST_CASE("stailq.clear", "[stailq][clear][template]",
+    stq_head_inline_t, stq_head_invoke_t, stq_test_proxy_t,
+    stq_head_entry_inherit_t, stq_head_entry_extend_t, stq_head_stateful_t) {
+  clear_tests<TestType>();
 }
 
-TEST_CASE("stailq.basic.proxy", "[stailq][basic][proxy]") {
-  basic_tests<stq_test_proxy_t>();
-}
-
-TEST_CASE("stailq.basic.stateful", "[stailq][basic][stateful]") {
-  basic_tests<stq_head_stateful_t>();
-}
-
-TEST_CASE("stailq.clear", "[stailq]") {
-  SECTION("offset_no_size") { clear_tests<stq_head_t>(); }
-  SECTION("offset_inline_size") { clear_tests<stq_head_inline_t>(); }
-}
-
-TEST_CASE("stailq.move", "[stailq]") {
+TEST_CASE("stailq.move", "[stailq][move]") {
   SECTION("stateless") { move_tests<stq_head_t, stq_test_proxy_t>(); }
   SECTION("stateful") { move_tests<stq_head_stateful_t, stq_test_proxy_stateful_t>(); }
   SECTION("inline_computed") { move_tests<stq_head_inline_t, stq_head_t>(); }
@@ -72,210 +92,116 @@ TEST_CASE("stailq.move", "[stailq]") {
   SECTION("computed_inline2") { move_tests<stq_head_t, stq_test_proxy_inline_t>(); }
 }
 
-TEST_CASE("stailq.extra_ctor", "[stailq]") {
-  extra_ctor_tests<stq_head_t>();
-  extra_ctor_tests<stq_test_proxy_t>();
+TEMPLATE_TEST_CASE("stailq.extra_ctor", "[stailq][extra_ctor][template]",
+    stq_head_inline_t, stq_head_invoke_t, stq_test_proxy_t,
+    stq_head_entry_inherit_t, stq_head_entry_extend_t, stq_head_stateful_t) {
+  extra_ctor_tests<TestType>();
 }
 
-TEST_CASE("stailq.bulk_insert", "[stailq]") {
-  bulk_insert_tests<stq_head_t>();
-  bulk_insert_tests<stq_test_proxy_t>();
-
-  // An extra test is added for the stailq; like bulk_insert.initializer_list,
-  // but insert after the first element to test that before_end() will need to
-  // be maintained.
-  stq_head_t head;
-  S s[] = { S{.i = 0}, S{.i = 1}, S{.i = 2} };
-
-  head.insert_after(head.before_begin(), &s[0] );
-  auto i = head.insert_after(head.before_end(), { &s[1], &s[2] });
-  REQUIRE( std::size(head) == 3 );
-  REQUIRE( std::addressof(*i++) == &s[2] );
-  REQUIRE( i == head.end() );
-  REQUIRE( std::addressof(head.front()) == &s[0] );
-  REQUIRE( std::addressof(head.back()) == &s[2] );
+TEMPLATE_TEST_CASE("stailq.bulk_insert", "[stailq][bulk_insert][template]",
+    stq_head_inline_t, stq_head_invoke_t, stq_test_proxy_t,
+    stq_head_entry_inherit_t, stq_head_entry_extend_t, stq_head_stateful_t) {
+  bulk_insert_tests<TestType>();
 }
 
-TEST_CASE("stailq.bulk_erase", "[stailq]") {
-  stq_head_t head;
-  S s[] = { S{.i = 0}, S{.i = 1}, S{.i = 2} };
-
-  head.insert_after(head.before_begin(), { &s[0], &s[1], &s[2] });
-
-  // Remove (s1, end), then check that the list is still valid and == [s1].
-  auto i = head.erase_after(head.begin(), head.end());
-  REQUIRE( std::size(head) == 1 );
-  REQUIRE( i == head.end() );
-  REQUIRE( std::addressof(*head.begin()) == &s[0] );
-  REQUIRE( std::addressof(*head.before_end()) == &s[0] );
-
-  // Remove (before_begin, end) and check that the list is empty.
-  i = head.erase_after(head.before_begin(), head.end());
-  REQUIRE( i == head.end() );
-  REQUIRE( head.before_begin() == head.before_end() );
-  REQUIRE( head.empty() );
-
-  // Remove the empty range (begin, end) -- this is a no-op, so it must leave
-  // the list in a valid state.
-  i = head.erase_after(head.begin(), head.end());
-  REQUIRE( i == head.end() );
-  REQUIRE( head.before_begin() == head.before_end() );
-  REQUIRE( head.empty() );
-  i = head.erase_after(head.before_begin(), head.end());
-  REQUIRE( i == head.end() );
-  REQUIRE( head.before_begin() == head.before_end() );
-  REQUIRE( head.empty() );
-
-  // Check that list is still usable after empty range erase.
-  head.insert_after(head.before_begin(), &s[0]);
-  REQUIRE( std::size(head) == 1 );
-  REQUIRE( std::addressof(head.front()) == &s[0] );
-  REQUIRE( std::addressof(head.back()) == &s[0] );
+TEMPLATE_TEST_CASE("stailq.bulk_erase", "[stailq][bulk_erase][template]",
+    stq_head_inline_t, stq_head_invoke_t, stq_test_proxy_t,
+    stq_head_entry_inherit_t, stq_head_entry_extend_t, stq_head_stateful_t) {
+  bulk_erase_tests<TestType>();
 }
 
-TEST_CASE("stailq.for_each_safe", "[stailq]") {
-  for_each_safe_tests<stq_head_t>();
+TEMPLATE_TEST_CASE("stailq.for_each_safe", "[stailq][for_each_safe][template]",
+    stq_head_t, stq_head_inline_t, stq_head_invoke_t, stq_test_proxy_t,
+    stq_head_entry_inherit_t, stq_head_entry_extend_t, stq_head_stateful_t) {
+  for_each_safe_tests<TestType>();
 }
 
-TEST_CASE("stailq.push_pop", "[stailq]") {
-  stq_head_t head;
-
-  S s[] = { S{.i = 0}, S{.i = 1} };
-
-  head.push_front(&s[0]);
-  REQUIRE( std::addressof(*head.begin()) == &s[0] );
-  REQUIRE( std::addressof(*head.before_end()) == &s[0] );
-  REQUIRE( std::size(head) == 1 );
-  REQUIRE( !head.empty() );
-  REQUIRE( ++head.begin() == head.end() );
-
-  head.push_back(&s[1]);
-  REQUIRE( std::size(head) == 2 );
-  REQUIRE( std::addressof(*head.begin()) == &s[0] );
-  REQUIRE( std::addressof(*head.before_end()) == &s[1] );
-
-  head.pop_front();
-  REQUIRE( std::size(head) == 1 );
-  REQUIRE( std::addressof(*head.begin()) == &s[1] );
-  REQUIRE( std::addressof(*head.before_end()) == &s[1] );
-
-  head.pop_front();
-  REQUIRE( head.empty() );
-  REQUIRE( head.before_begin() == head.before_end() );
+TEMPLATE_TEST_CASE("stailq.push_pop", "[stailq][push_pop][template]",
+    stq_head_t, stq_head_inline_t, stq_head_invoke_t, stq_test_proxy_t,
+    stq_head_entry_inherit_t, stq_head_entry_extend_t, stq_head_stateful_t) {
+  push_pop_tests<TestType>();
 }
 
+// FIXME: more test cases?
 TEST_CASE("stailq.swap", "[stailq]") {
   SECTION("stateless") { swap_tests<stq_head_t, stq_test_proxy_t>(); }
+  SECTION("head_mixed_size_1") { swap_tests<stq_head_t, stq_head_inline_t>(); }
+  SECTION("head_mixed_size_2") { swap_tests<stq_head_inline_t, stq_head_t>(); }
+  SECTION("proxy_mixed_size_1") { swap_tests<stq_test_proxy_t, stq_test_proxy_inline_t>(); }
+  SECTION("proxy_mixed_size_2") { swap_tests<stq_test_proxy_inline_t, stq_test_proxy_t>(); }
   SECTION("stateful") { swap_tests<stq_head_stateful_t, stq_test_proxy_stateful_t>(); }
 }
 
-TEST_CASE("stailq.find_predecessor", "[stailq]") {
-  find_predecessor_tests<stq_head_t>();
+TEMPLATE_TEST_CASE("stailq.find_predecessor",
+    "[stailq][find_predecessor][template]", stq_head_t, stq_head_inline_t,
+    stq_head_invoke_t, stq_test_proxy_t, stq_head_entry_inherit_t,
+    stq_head_entry_extend_t, stq_head_stateful_t) {
+  find_predecessor_tests<TestType>();
 }
 
+// FIXME: more test cases?
 TEST_CASE("stailq.proxy", "[stailq]") {
   proxy_tests<stq_fwd_head_t, stq_proxy_t>();
 }
 
-TEST_CASE("stailq.merge", "[stailq][oper]") { merge_tests<stq_head_t>(); }
+TEMPLATE_TEST_CASE("stailq.merge", "[stailq][merge][template]",
+    stq_head_t, stq_head_inline_t, stq_head_invoke_t, stq_test_proxy_t,
+    stq_head_entry_inherit_t, stq_head_entry_extend_t, stq_head_stateful_t) {
+  merge_tests<TestType>();
+}
 
-TEST_CASE("stailq.splice", "[stailq][oper]") {
-  stq_head_t head1;
-  stq_head_t head2;
+TEMPLATE_TEST_CASE("stailq.splice", "[stailq][splice][template]",
+    stq_head_t, stq_head_inline_t, stq_head_invoke_t, stq_test_proxy_t,
+    stq_head_entry_inherit_t, stq_head_entry_extend_t, stq_head_stateful_t) {
+  splice_tests<TestType>();
+}
 
-  S s[] = { S{.i = 0}, S{.i = 1}, S{.i = 2}, S{.i = 3}, S{.i = 4}, S{.i = 5} };
-
-  SECTION("splice_in_middle") {
-    head1.insert_after(head1.before_begin(), { &s[0], &s[1], &s[5] });
-    head2.insert_after(head2.before_begin(), { &s[2], &s[3], &s[4] });
-
-    head1.splice_after(++head1.begin(), head2);
-    REQUIRE( head2.empty() );
-    int idx = 0;
-    for (const S &item : head1)
-      REQUIRE( item.i == s[idx++].i );
-    REQUIRE( std::addressof(head1.back()) == &s[5] );
+TEST_CASE("stailq.splice.other_derived", "[stailq][splice][other_derived]") {
+  SECTION("stateless") {
+    splice_tests_other_derived<stq_head_t, stq_test_proxy_t>();
   }
 
-  SECTION("splice_at_end") {
-    head1.insert_after(head1.before_begin(), { &s[0], &s[1] });
-    head2.insert_after(head2.before_begin(), { &s[2], &s[3] });
-
-    head1.splice_after(++head1.begin(), head2);
-    REQUIRE( head2.empty() );
-    int idx = 0;
-    for (const S &item : head1)
-      REQUIRE( item.i == s[idx++].i );
-    REQUIRE( std::addressof(head1.back()) == &s[3] );
+  SECTION("stateful") {
+    splice_tests_other_derived<stq_head_stateful_t, stq_test_proxy_stateful_t>();
   }
 
-  SECTION("splice_empty") {
-    head1.insert_after(head1.before_begin(), { &s[0], &s[1] });
-
-    head1.splice_after(++head1.begin(), head2);
-    REQUIRE( head2.empty() );
-    int idx = 0;
-    for (const S &item : head1)
-      REQUIRE( item.i == s[idx++].i );
-    REQUIRE( std::addressof(head1.back()) == &s[1] );
+  SECTION("inline_computed") {
+    splice_tests_other_derived<stq_head_inline_t, stq_head_t>();
   }
 
-  SECTION("splice_partial") {
-    head1.insert_after(head1.before_begin(), { &s[0], &s[5] });
-    head2.insert_after(head2.before_begin(), { &s[1], &s[2], &s[3], &s[4] });
-
-    head1.splice_after(head1.begin(), head2, head2.begin(),
-                       std::next(head2.begin(), 3));
-
-    auto i = head1.cbegin();
-    REQUIRE( std::size(head1) == 4 );
-    REQUIRE( std::addressof(*i++)== &s[0] );
-    REQUIRE( std::addressof(*i++)== &s[2] );
-    REQUIRE( std::addressof(*i++)== &s[3] );
-    REQUIRE( std::addressof(*i++)== &s[5] );
-    REQUIRE( i == head1.cend() );
-    REQUIRE( std::addressof(head1.back()) == &s[5] );
-
-    i = head2.cbegin();
-    REQUIRE( std::size(head2) == 2 );
-    REQUIRE( std::addressof(*i++) == &s[1] );
-    REQUIRE( std::addressof(*i++) == &s[4] );
-    REQUIRE( i == head2.cend() );
-    REQUIRE( std::addressof(head2.back()) == &s[4] );
+  SECTION("computed_inline") {
+    splice_tests_other_derived<stq_head_t, stq_head_inline_t>();
   }
 
-  SECTION("other_derived_type") {
-    stq_fwd_head_t fwdHead2;
-    stq_proxy_t head2{fwdHead2};
+  SECTION("inline_computed2") {
+    splice_tests_other_derived<stq_test_proxy_inline_t, stq_head_t>();
+  }
 
-    head1.insert_after(head1.before_begin(), { &s[0], &s[5] });
-    head2.insert_after(head2.before_begin(), { &s[1], &s[2], &s[3], &s[4] });
-
-    head1.splice_after(head1.begin(), head2, head2.begin(),
-                       std::next(head2.begin(), 3));
-
-    auto i1 = head1.cbegin();
-    REQUIRE( std::size(head1) == 4 );
-    REQUIRE( std::addressof(*i1++)== &s[0] );
-    REQUIRE( std::addressof(*i1++)== &s[2] );
-    REQUIRE( std::addressof(*i1++)== &s[3] );
-    REQUIRE( std::addressof(*i1++)== &s[5] );
-    REQUIRE( i1 == head1.cend() );
-    REQUIRE( std::addressof(head1.back()) == &s[5] );
-
-    auto i2 = head2.cbegin();
-    REQUIRE( std::size(head2) == 2 );
-    REQUIRE( std::addressof(*i2++) == &s[1] );
-    REQUIRE( std::addressof(*i2++) == &s[4] );
-    REQUIRE( i2 == head2.cend() );
-    REQUIRE( std::addressof(head2.back()) == &s[4] );
+  SECTION("computed_inline2") {
+    splice_tests_other_derived<stq_head_t, stq_test_proxy_inline_t>();
   }
 }
 
-TEST_CASE("stailq.remove", "[stailq][oper]") { remove_tests<stq_head_t>(); }
+TEMPLATE_TEST_CASE("stailq.remove", "[stailq][remove][template]",
+    stq_head_t, stq_head_inline_t, stq_head_invoke_t, stq_test_proxy_t,
+    stq_head_entry_inherit_t, stq_head_entry_extend_t, stq_head_stateful_t) {
+  remove_tests<TestType>();
+}
 
-TEST_CASE("stailq.reverse", "[stailq][oper]") { reverse_tests<stq_head_t>(); }
+TEMPLATE_TEST_CASE("stailq.reverse", "[stailq][reverse][template]",
+    stq_head_t, stq_head_inline_t, stq_head_invoke_t, stq_test_proxy_t,
+    stq_head_entry_inherit_t, stq_head_entry_extend_t, stq_head_stateful_t) {
+  reverse_tests<TestType>();
+}
 
-TEST_CASE("stailq.unique", "[stailq][oper]") { unique_tests<stq_head_t>(); }
+TEMPLATE_TEST_CASE("stailq.unique", "[stailq][unique][template]",
+    stq_head_t, stq_head_inline_t, stq_head_invoke_t, stq_test_proxy_t,
+    stq_head_entry_inherit_t, stq_head_entry_extend_t, stq_head_stateful_t) {
+  unique_tests<TestType>();
+}
 
-TEST_CASE("stailq.sort", "[stailq][oper]") { sort_tests<stq_head_t>(); }
+TEMPLATE_TEST_CASE("stailq.sort", "[stailq][sort][template]",
+    stq_head_t, stq_head_inline_t, stq_head_invoke_t, stq_test_proxy_t,
+    stq_head_entry_inherit_t, stq_head_entry_extend_t, stq_head_stateful_t) {
+  sort_tests<TestType>();
+}
