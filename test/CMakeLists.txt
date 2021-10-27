@@ -53,6 +53,7 @@ function(add_csd_test name)
   add_test(${name} ${name})
 endfunction()
 
+add_csd_test(utility_tests)
 add_csd_test(slist_tests)
 add_csd_test(stailq_tests)
 add_csd_test(tailq_tests)

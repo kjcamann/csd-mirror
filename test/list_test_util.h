@@ -300,6 +300,16 @@ auto erase_after(ListType &L, CSG_TYPENAME ListType::const_iterator begin,
   return L.erase(++begin, end);
 }
 
+template <csg::singly_linked_list ListType>
+auto erase_item(ListType &L, CSG_TYPENAME ListType::const_iterator pos) {
+  return L.find_erase(pos);
+}
+
+template <csg::tailq ListType>
+auto erase_item(ListType &L, CSG_TYPENAME ListType::const_iterator pos) {
+  return L.erase(pos);
+}
+
 template <typename T>
 std::int64_t get_value(const T &t) {
   if constexpr (requires {t.i();})

@@ -1,4 +1,4 @@
-//==-- csg/intrusive.h - Intrusive data structure utilities -----*- C++ -*-==//
+//==-- csg/core/intrusive.h - Intrusive data structure utilities -*- C++ -*-==//
 //
 //                Cyril Software Data Structures (CSD) Library
 //
@@ -282,9 +282,11 @@ struct entry_ref_codec {
     return invocable_tagged_ref<EntryType, T>{entry};
   }
 
+  template <typename U>
+    requires std::same_as<std::remove_cv_t<U>, T>
   constexpr static entry_ref_union<EntryType, T>
-  create_item_entry_ref(T *t) noexcept {
-    return invocable_tagged_ref<EntryType, T>{t};
+  create_item_entry_ref(U *u) noexcept {
+    return invocable_tagged_ref<EntryType, T>{u};
   }
 
   constexpr static EntryType *
@@ -307,9 +309,11 @@ struct entry_ref_codec<EntryType, T, offset_extractor<EntryType, T, Offset>> {
     return offset_entry_ref<EntryType>{entry};
   }
 
+  template <typename U>
+    requires std::same_as<std::remove_cv_t<U>, T>
   constexpr static entry_ref_union<EntryType, T>
-  create_item_entry_ref(T *t) noexcept {
-    auto *const p = std::bit_cast<std::byte *>(t);
+  create_item_entry_ref(U *u) noexcept {
+    auto *const p = std::bit_cast<std::byte *>(u);
     return create_direct_entry_ref(std::bit_cast<EntryType *>(p + Offset));
   }
 

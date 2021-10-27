@@ -1,4 +1,4 @@
-//==-- csg/slist.h - singly-linked list implementation ----------*- C++ -*-==//
+//==-- csg/core/slist.h - singly-linked list implementation -----*- C++ -*-==//
 //
 //                Cyril Software Data Structures (CSD) Library
 //

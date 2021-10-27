@@ -1,4 +1,4 @@
-//==-- csg/stailq.h - singly-linked tail queue implementation ---*- C++ -*-==//
+//==-- csg/core/stailq.h - singly-linked tail queue impl. -------*- C++ -*-==//
 //
 //                Cyril Software Data Structures (CSD) Library
 //
@@ -358,7 +358,7 @@ public:
             std::predicate<std::invoke_result_t<Proj, const_reference>> Pred>
   [[nodiscard]] constexpr std::pair<iterator, bool>
   find_predecessor_if(const_iterator first, const_iterator last,
-                      Pred pred, Proj proj) const
+                      Pred pred, Proj = {}) const
       noexcept(s_has_nothrow_extractor &&
                util::is_nothrow_proj_invocable<const_reference, Proj, Pred>);
 
@@ -645,10 +645,12 @@ public:
 
   constexpr const_iterator(const_pointer p) noexcept
       requires stateless<entry_extractor_type>
-      : m_current{entry_ref_codec::create_entry_ref(p)}, m_rEntryExtractor{} {}
+      : m_current{entry_ref_codec::create_item_entry_ref(p)},
+        m_rEntryExtractor{} {}
 
   constexpr const_iterator(const_pointer p, entry_extractor_type &fn) noexcept
-      : m_current{entry_ref_codec::create_entry_ref(p)}, m_rEntryExtractor{fn} {}
+      : m_current{entry_ref_codec::create_item_entry_ref(p)},
+        m_rEntryExtractor{fn} {}
 
   ~const_iterator() = default;
 

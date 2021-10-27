@@ -1,4 +1,4 @@
-//==-- csg/utility.h - miscellaneous utility classes/functions --*- C++ -*-==//
+//==-- csg/core/utility.h - misc. utility classes/functions -----*- C++ -*-==//
 //
 //                Cyril Software Data Structures (CSD) Library
 //
@@ -32,14 +32,14 @@ namespace csg::util {
 constexpr std::ptrdiff_t type_not_found = -1;
 
 template <typename T, typename U, typename... Us>
-constexpr std::ptrdiff_t type_index = std::same_as<T, U>
+constexpr std::ptrdiff_t type_index = std::same_as<std::remove_cv_t<T>, U>
     ? 0
     : (type_index<T, Us...> == type_not_found)
         ? type_not_found
         : 1 + type_index<T, Us...>;
 
 template <typename T, typename U>
-constexpr std::ptrdiff_t type_index<T, U> = std::same_as<T, U>
+constexpr std::ptrdiff_t type_index<T, U> = std::same_as<std::remove_cv_t<T>, U>
     ? 0
     : type_not_found;
 
@@ -71,8 +71,12 @@ public:
 
   template <tagged_ptr_layout_compatible<Ts...> U>
   constexpr bool has_type() const noexcept {
-    return (m_address & Mask) == type_index<U, Ts...>;
+    return m_address && (m_address & Mask) == type_index<U, Ts...>;
   }
+
+  /// has_type is defined for non-member types, and is always false.
+  template <typename U>
+  constexpr bool has_type() const noexcept { return false; }
 
   constexpr std::uintptr_t address() const noexcept {
     return m_address & ~static_cast<std::uintptr_t>(Mask);
@@ -91,12 +95,18 @@ public:
     return std::bit_cast<U *>(address());
   }
 
+  template <typename U>
+  constexpr explicit operator U *() const noexcept { return nullptr; }
+
   template <tagged_ptr_convertible_to<Ts...> U>
   constexpr U *safe_cast() const noexcept {
     return (index() == type_index<U, Ts...>)
         ? std::bit_cast<U *>(address())
         : nullptr;
   }
+
+  template <typename U>
+  constexpr U *safe_cast() const noexcept { return nullptr; }
 
   constexpr tagged_ptr_union &operator=(const tagged_ptr_union &) = default;
   constexpr tagged_ptr_union &operator=(tagged_ptr_union &&) = default;
@@ -117,6 +127,9 @@ public:
   constexpr bool operator==(const U *u) const noexcept {
     return static_cast<U *>(*this) == u;
   }
+
+  template <typename U>
+  constexpr bool operator==(const U *u) const noexcept { return false; }
 
 private:
   std::uintptr_t m_address;

@@ -589,6 +589,12 @@ void bulk_erase_tests() {
   REQUIRE( std::addressof(head.front()) == &e[0] );
   if constexpr (requires(ListType L) { L.back(); })
     REQUIRE( std::addressof(head.back()) == &e[0] );
+
+  if constexpr (csg::stateless<typename ListType::entry_extractor_type>) {
+    // For stateless extractors, check that we can erase by address.
+    erase_item(head, &e[0]);
+    REQUIRE( std::empty(head) );
+  }
 }
 
 template <csg::linked_list ListType>

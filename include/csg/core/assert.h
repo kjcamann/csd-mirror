@@ -1,4 +1,4 @@
-//==-- csg/assert.h - Assert macros used in CSG -----------------*- C++ -*-==//
+//==-- csg/core/assert.h - Assert macros used in CSG ------------*- C++ -*-==//
 //
 //                Cyril Software Data Structures (CSD) Library
 //

@@ -1,4 +1,4 @@
-//==-- csg/listfwd.h - forward decl. for queue(3)-style lists ---*- C++ -*-==//
+//==-- csg/core/listfwd.h - fwd. decl. for queue(3)-style lists -*- C++ -*-==//
 //
 //                Cyril Software Data Structures (CSD) Library
 //

@@ -60,7 +60,12 @@ using ExtendD = DirectEntryList<extended_entry_member>;
 using sl_head_entry_inherit_t = slist_head_cinvoke_t<&InheritD::next>;
 using sl_head_entry_extend_t = CSG_SLIST_HEAD_OFFSET_T(ExtendD, next.entry);
 
-// FIXME: document this
+// List heads are fundamental building blocks of BSD-style intrusive data
+// structure design. They must be standard layout types so that they can be
+// used within "simple" types without changing the properties of those types,
+// namely that offsetof is guaranteed to work. This ensures a type can contain
+// both list heads and list linkage and still work with offsetof-based
+// extractors.
 static_assert(std::is_standard_layout_v<sl_head_t>);
 static_assert(std::is_standard_layout_v<sl_head_inline_t>);
 static_assert(std::is_standard_layout_v<sl_head_invoke_t>);

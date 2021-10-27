@@ -31,12 +31,12 @@ namespace csg {
 template <typename T, CompressedSize SizeMember = no_size>
 using list_fwd_head CSG_DEPRECATE_LIST_ATTR = tailq_fwd_head<T, SizeMember>;
 
-template <typename FwdHead, typename EntryAccessor>
+template <typename FwdHead, typename EntryEx>
 using list_proxy CSG_DEPRECATE_LIST_ATTR = tailq_proxy<FwdHead, SizeMember>;
 
-template <typename T, typename EntryAccessor, CompressedSize SizeMember = no_size>
+template <typename T, typename EntryEx, CompressedSize SizeMember = no_size>
 using list_head CSG_DEPRECATE_LIST_ATTR =
-    tailq_head<T, EntryAccessor, SizeMember>;
+    tailq_head<T, EntryEx, SizeMember>;
 
 } // End of namespace csg
 

@@ -1,4 +1,4 @@
-//==-- csg/tailq.h - tail queue intrusive list implementation ---*- C++ -*-==//
+//==-- csg/core/tailq.h - tail queue intrusive list impl. -------*- C++ -*-==//
 //
 //                Cyril Software Data Structures (CSD) Library
 //
