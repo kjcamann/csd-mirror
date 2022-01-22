@@ -63,9 +63,11 @@ And finally, here they are!
 How do I install CSD?
 =====================
 
-CSD is a header-only library, so there is little to do. The one exception is if you enable assertions in the library by ``#define``\ ing ``CSG_DEBUG_LEVEL`` to ``1`` via the C preprocessor; in that case, the library will emit calls to an ``extern "C"`` free function called ``csg_assert_function`` which you must provide to the linker. No default definition is provided because the "weak linkage" concept is not portable to Windows. See the ``driver.cpp`` file in the test suite for an example of a simple assertion function that prints to stderr, then calls `std::terminate <https://en.cppreference.com/w/cpp/error/terminate>`_.
+CSD is a header-only library, so there is little to do. However, you should read the `installation page <https://kjcamann.github.io/doc/csd/installation.html>`_ if you want to:
 
-The included CMake build system is only needed to build the test suite and the Sphinx documentation, but it does include an ``install`` target which will copy the CSD headers, if you wish to use that. To build the Sphinx documentation, you must also install `doxygen <https://www.doxygen.org>`_, `breathe <https://breathe.readthedocs.io>`_, the `"Read the Docs" Sphinx theme <https://sphinx-rtd-theme.readthedocs.io/en/latest>`_, and `Sphinx itself <https://www.sphinx-doc.org/en/stable/>`_. Building the test suite will use CMake's `ExternalProject <https://cmake.org/cmake/help/latest/module/ExternalProject.html>`_ command to fetch the `Catch2 <https://github.com/catchorg/Catch2>`_ unit testing framework from Github, so it requires an Internet connection.
+- Enable CSD assertions (to catch undefined behavior if you break the API contract)
+- Install the GDB debug pretty printers
+- Build the test suite or the documentation
 
 .. csd-readme-include-end
 
