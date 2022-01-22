@@ -7,8 +7,8 @@
 
 #include <csg/core/assert.h>
 
-extern "C" void csg_assert_function(const csg::assert_info &info,
-                                    const char *format, ...) {
+extern "C" [[noreturn]] void
+csg_assert_function(const csg::assert_info &info, const char *format, ...) noexcept {
   std::fprintf(stderr, "assertion failed: %s <%s@%s:%d>\n", info.test,
                info.function, info.file, info.line);
 

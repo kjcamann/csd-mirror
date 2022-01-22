@@ -46,8 +46,8 @@ struct assert_info {
 
 } // End of namespace csg
 
-extern "C" void csg_assert_function(const csg::assert_info &,
-                                    const char *format, ...);
+extern "C" [[noreturn]] void
+csg_assert_function(const csg::assert_info &, const char *format, ...) noexcept;
 
 inline void csg_assert_function(const csg::assert_info &i) {
   csg_assert_function(i, nullptr);

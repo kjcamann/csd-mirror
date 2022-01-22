@@ -459,32 +459,21 @@ private:
     return const_cast<slist_base *>(this)->get_entry_extractor();
   }
 
-  constexpr static entry_type *
-  getEntry(entry_extractor_type &ex, entry_ref_type ref)
-      noexcept(s_has_nothrow_extractor) {
-    // Rather than just being called directly, this is factored into a
-    // static function so gdb pretty-printers can find it more easily.
-    return entry_ref_codec::get_entry(ex, ref);
-  }
-
-  constexpr static reference getValue(entry_ref_type ref) noexcept {
-    // As above
-    return entry_ref_codec::get_value(ref);
-  }
-
   constexpr entry_type *refToEntry(entry_ref_type ref)
       noexcept(s_has_nothrow_extractor) {
-    return getEntry(get_entry_extractor(), ref);
+    return entry_ref_codec::get_entry(get_entry_extractor(), ref);
   }
 
   constexpr static entry_type *iterToEntry(iterator_t i)
       noexcept(s_has_nothrow_extractor) {
-    return getEntry(i.m_rEntryExtractor.get_invocable(), i.m_current);
+    auto &entryEx = i.m_rEntryExtractor.get_invocable();
+    return entry_ref_codec::get_entry(entryEx, i.m_current);
   }
 
   constexpr static entry_type *iterToEntry(const_iterator_t i)
       noexcept(s_has_nothrow_extractor) {
-    return getEntry(i.m_rEntryExtractor.get_invocable(), i.m_current);
+    auto &entryEx = i.m_rEntryExtractor.get_invocable();
+    return entry_ref_codec::get_entry(entryEx, i.m_current);
   }
 
   constexpr static entry_ref_type iterToEntryRef(const_iterator_t i) noexcept {
@@ -539,7 +528,7 @@ public:
   constexpr iterator &operator=(iterator &&) = default;
 
   constexpr reference operator*() const noexcept {
-    return slist_base::getValue(m_current);
+    return slist_base::entry_ref_codec::get_value(m_current);
   }
 
   constexpr pointer operator->() const noexcept {
@@ -621,7 +610,7 @@ public:
   constexpr const_iterator &operator=(const_iterator &&) = default;
 
   constexpr reference operator*() const noexcept {
-    return slist_base::getValue(m_current);
+    return slist_base::entry_ref_codec::get_value(m_current);
   }
 
   constexpr pointer operator->() const noexcept {

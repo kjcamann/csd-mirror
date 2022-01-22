@@ -208,7 +208,9 @@ public:
 
   [[nodiscard]] constexpr bool empty() const noexcept {
     const entry_type &endEntry = getHeadData().m_endEntry;
-    return getEntry(get_entry_extractor_mutable(), endEntry.next) == &endEntry;
+    entry_type *const firstEntry =
+        entry_ref_codec::get_entry(get_entry_extractor_mutable(), endEntry.next);
+    return firstEntry == std::addressof(endEntry);
   }
 
   constexpr size_type size() const
@@ -414,30 +416,21 @@ private:
     return const_cast<tailq_base *>(this)->get_entry_extractor();
   }
 
-  constexpr static entry_type *
-  getEntry(entry_extractor_type &ex, entry_ref_type ref)
-      noexcept(s_has_nothrow_extractor) {
-    return entry_ref_codec::get_entry(ex, ref);
-  }
-
-  constexpr static reference getValue(entry_ref_type ref) noexcept {
-    return entry_ref_codec::get_value(ref);
-  }
-
-
   constexpr entry_type *refToEntry(entry_ref_type ref)
       noexcept(s_has_nothrow_extractor) {
-    return getEntry(get_entry_extractor(), ref);
+    return entry_ref_codec::get_entry(get_entry_extractor(), ref);
   }
 
   constexpr static entry_type *iterToEntry(iterator_t i)
       noexcept(s_has_nothrow_extractor) {
-    return getEntry(i.m_rEntryExtractor.get_invocable(), i.m_current);
+    auto &entryEx = i.m_rEntryExtractor.get_invocable();
+    return entry_ref_codec::get_entry(entryEx, i.m_current);
   }
 
   constexpr static entry_type *iterToEntry(const_iterator_t i)
       noexcept(s_has_nothrow_extractor) {
-    return getEntry(i.m_rEntryExtractor.get_invocable(), i.m_current);
+    auto &entryEx = i.m_rEntryExtractor.get_invocable();
+    return entry_ref_codec::get_entry(entryEx, i.m_current);
   }
 
   template <typename QueueIt>
@@ -491,7 +484,7 @@ public:
   constexpr iterator &operator=(iterator &&) = default;
 
   constexpr reference operator*() const noexcept {
-    return tailq_base::getValue(m_current);
+    return tailq_base::entry_ref_codec::get_value(m_current);
   }
 
   constexpr pointer operator->() const noexcept {
@@ -583,7 +576,7 @@ public:
   constexpr const_iterator &operator=(const_iterator &&) = default;
 
   constexpr reference operator*() const noexcept {
-    return tailq_base::getValue(m_current);
+    return tailq_base::entry_ref_codec::get_value(m_current);
   }
 
   constexpr pointer operator->() const noexcept {
@@ -1373,11 +1366,12 @@ constexpr void tailq_base<T, E, S, D>::insert_range(const_iterator pos,
                                                     QueueIt first, QueueIt last)
     noexcept(s_has_nothrow_extractor) {
   // Inserts the closed range [first, last] before pos.
+  auto &entryEx = pos.m_rEntryExtractor.get_invocable();
   entry_type *const posEntry = iterToEntry(pos);
   entry_type *const firstEntry = QueueIt::container::iterToEntry(first);
   entry_type *const lastEntry = QueueIt::container::iterToEntry(last);
   entry_type *const beforePosEntry =
-      getEntry(pos.m_rEntryExtractor.get_invocable(), posEntry->prev);
+      entry_ref_codec::get_entry(entryEx, posEntry->prev);
 
   firstEntry->prev = posEntry->prev;
   beforePosEntry->next = first.m_current;
@@ -1390,14 +1384,15 @@ constexpr void tailq_base<T, E, S, D>::remove_range(const_iterator first,
                                                     const_iterator last)
     noexcept(s_has_nothrow_extractor) {
   // Removes the closed range [first, last].
+  auto &entryEx = first.m_rEntryExtractor.get_invocable();
   entry_type *const firstEntry = iterToEntry(first);
   entry_type *const lastEntry = iterToEntry(last);
 
   entry_type *const beforeFirstEntry =
-      getEntry(first.m_rEntryExtractor.get_invocable(), firstEntry->prev);
+      entry_ref_codec::get_entry(entryEx, firstEntry->prev);
 
   entry_type *const afterLastEntry =
-      getEntry(last.m_rEntryExtractor.get_invocable(), lastEntry->next);
+      entry_ref_codec::get_entry(entryEx, lastEntry->next);
 
   beforeFirstEntry->next = lastEntry->next;
   afterLastEntry->prev = firstEntry->prev;

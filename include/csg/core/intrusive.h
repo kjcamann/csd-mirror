@@ -318,7 +318,7 @@ struct entry_ref_codec<EntryType, T, offset_extractor<EntryType, T, Offset>> {
   }
 
   constexpr static EntryType *
-  get_entry(extractor_type, entry_ref_union<EntryType, T> u) noexcept {
+  get_entry(extractor_type &, entry_ref_union<EntryType, T> u) noexcept {
     return u.offset.get_entry();
   }
 
