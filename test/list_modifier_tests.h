@@ -1,7 +1,9 @@
 #ifndef CSD_LIST_MODIFIER_TESTS_H
 #define CSD_LIST_MODIFIER_TESTS_H
 
+#include <algorithm>
 #include <cstring>
+#include <forward_list>
 #include <iterator>
 #include <memory>
 #include <span>
@@ -342,6 +344,25 @@ void extra_ctor_tests() {
     E *insert[] = { &e[0], &e[1], &e[2] };
 
     ListType head{std::span{insert}};
+
+    REQUIRE( std::size(head) == 3 );
+
+    auto i = head.begin();
+    REQUIRE( std::addressof(*i++) == &e[0] );
+    REQUIRE( std::addressof(*i++) == &e[1] );
+    REQUIRE( std::addressof(*i++) == &e[2] );
+    REQUIRE( i == head.end() );
+
+    if constexpr (csg::stailq<ListType>)
+      REQUIRE( std::addressof(*head.before_end()) == &e[2] );
+  }
+
+  SECTION("ctor.forward_range") {
+    // Ensure the implementation doesn't rely on any random-access
+    // behavior.
+    std::forward_list<E*> insert{ &e[0], &e[1], &e[2] };
+
+    ListType head{insert};
 
     REQUIRE( std::size(head) == 3 );
 
@@ -824,24 +845,45 @@ void proxy_test_helper(ProxyType head, CSG_TYPENAME ProxyType::pointer e) {
   REQUIRE( std::size(head) == 2 );
 }
 
-template <typename FwdHeadType, typename ProxyType>
+template <typename ProxyType>
 void proxy_tests() {
-  // Test that a fwd_head can be bound to another proxy wrapper and it will
-  // affect the state of the fwd_head object when accessed through the original
-  // wrapper. This also shows the implicit construction of the proxy wrapper
-  // from the fwd_head (in the function call), and tests that the destructor of
-  // the proxy wrapper (at the end of the called function) does not
-  // affect/damage the list when accessed through the original proxy.
-  FwdHeadType fwdHead;
-  ProxyType head{fwdHead};
-
   using E = CSG_TYPENAME ProxyType::value_type;
   E e[] = { {0}, {1} };
 
-  insert_front(head, &e[0]);
-  REQUIRE( std::size(head) == 1 );
-  proxy_test_helper<ProxyType>(fwdHead, &e[1]);
-  REQUIRE( std::size(head) == 2 );
+  typename ProxyType::fwd_head_type fwdHead;
+
+  SECTION("basic") {
+    // Test that a fwd_head can be bound to another proxy wrapper and it will
+    // affect the state of the fwd_head object when accessed through the
+    // original wrapper. This also shows the implicit construction of the proxy
+    // wrapper from the fwd_head (in the function call), and tests that the
+    // destructor of the proxy wrapper (at the end of the called function) does
+    // not affect/damage the list when accessed through the original proxy.
+    ProxyType head{fwdHead};
+
+    insert_front(head, &e[0]);
+    REQUIRE( std::size(head) == 1 );
+    proxy_test_helper<ProxyType>(fwdHead, &e[1]);
+    REQUIRE( std::size(head) == 2 );
+  }
+
+  SECTION("borrowed_range") {
+    // A common way to use a fwd_head/proxy pair is to construct a proxy
+    // temporary around the fwd_head in the same expression where we're
+    // going to use it. If we do this in a std::ranges algorithm, the
+    // proxy type will need to be marked as a borrowed range, otherwise
+    // a dangling iterator will result.
+    insert_front(ProxyType{fwdHead}, { &e[0], &e[1] });
+
+    const  auto i =
+          std::ranges::find(ProxyType{fwdHead}, get_value(e[1]), get_value<E>);
+    REQUIRE( get_value(*i) == get_value(e[1]) );
+  }
+
+  SECTION("view") {
+    // Lists are (non-copyable) views.
+    REQUIRE( std::ranges::enable_view<ProxyType> );
+  }
 }
 
 #endif

@@ -13,6 +13,8 @@
 #include <utility>
 #include <vector>
 
+#include <catch2/catch.hpp>
+
 #include <csg/core/listfwd.h>
 #include <csg/core/utility.h>
 
@@ -68,17 +70,18 @@ class StatefulExtractorList;
 template <template <typename> class EntryType>
 class StatefulExtractor {
 public:
-  StatefulExtractor() noexcept : numAccesses{0}, movedFrom{false} {}
+  StatefulExtractor() noexcept : numAccesses{0}, movedFrom{false}, alive{true} {}
 
   StatefulExtractor(const StatefulExtractor &) = delete;
 
-  StatefulExtractor(StatefulExtractor &&other) noexcept : movedFrom{false} {
+  StatefulExtractor(StatefulExtractor &&other) noexcept
+      : movedFrom{false}, alive{true} {
     numAccesses = other.numAccesses;
     other.numAccesses = 0;
     other.movedFrom = true;
   }
 
-  ~StatefulExtractor() = default;
+  ~StatefulExtractor() { alive = false; }
 
   StatefulExtractor &operator=(const StatefulExtractor &) = delete;
 
@@ -91,12 +94,19 @@ public:
 
   EntryType<StatefulExtractorList<EntryType>>
   &operator()(StatefulExtractorList<EntryType> &u) noexcept {
+    // The odd `if(!alive) REQUIRE(alive);` construction is so that we still
+    // fail the test if we're accessing a dangling iterator but if we're not,
+    // then we won't add to the number of counted assertions. Otherwise catch
+    // will report something like "1 million assertions in 100 test cases".
+    if (!alive)
+      REQUIRE( alive );
     ++numAccesses;
     return u._next;
   }
 
   std::uint64_t numAccesses = 0;
   bool movedFrom;
+  bool alive;
 };
 
 template <template <typename> class EntryType>
@@ -154,11 +164,7 @@ public:
       : ListProxyType{ctorFwdHead(), first, last} {}
 
   template <std::ranges::input_range Range, typename... Ts>
-  list_test_proxy(Range &r, Ts &&...vs) noexcept
-      : ListProxyType{ctorFwdHead(), r, std::forward<Ts>(vs)...} {}
-
-  template <std::ranges::input_range Range, typename... Ts>
-  list_test_proxy(const Range &r, Ts &&...vs) noexcept
+  list_test_proxy(Range &&r, Ts &&...vs) noexcept
       : ListProxyType{ctorFwdHead(), r, std::forward<Ts>(vs)...} {}
 
   list_test_proxy(std::initializer_list<typename ListProxyType::pointer> ilist) noexcept
@@ -191,15 +197,7 @@ public:
   template <std::ranges::input_range Range>
       requires std::constructible_from<typename ListProxyType::pointer,
                                        std::ranges::range_reference_t<Range>>
-  list_test_proxy &operator=(Range &r) noexcept {
-    this->ListProxyType::operator=(r);
-    return *this;
-  }
-
-  template <std::ranges::input_range Range>
-      requires std::constructible_from<typename ListProxyType::pointer,
-                                       std::ranges::range_reference_t<Range>>
-  list_test_proxy &operator=(const Range &r) noexcept {
+  list_test_proxy &operator=(Range &&r) noexcept {
     this->ListProxyType::operator=(r);
     return *this;
   }
@@ -228,85 +226,117 @@ concept test_proxy = csg::linked_list<T> && requires {
 };
 
 // FIXME [docs]: explain why we can't use push_front here in impl. docs
-template <csg::singly_linked_list ListType, typename S>
-auto insert_front(ListType &L, S *s) noexcept {
+template <typename ListType, typename S>
+    requires csg::singly_linked_list<std::remove_reference_t<ListType>>
+auto insert_front(ListType &&L, S *s) noexcept {
   return L.insert_after(L.before_begin(), s);
 }
 
-template <csg::singly_linked_list ListType, std::input_iterator InputIt,
+template <typename ListType, std::input_iterator InputIt,
           std::sentinel_for<InputIt> Sentinel>
-auto insert_front(ListType &L, InputIt begin, Sentinel end) noexcept {
+    requires csg::singly_linked_list<std::remove_reference_t<ListType>>
+auto insert_front(ListType &&L, InputIt begin, Sentinel end) noexcept {
   return L.insert_after(L.before_begin(), begin, end);
 }
 
-template <csg::singly_linked_list ListType, std::ranges::input_range Range>
-auto insert_front(ListType &L, Range r) noexcept {
+template <typename ListType, std::ranges::input_range Range>
+    requires csg::singly_linked_list<std::remove_reference_t<ListType>>
+auto insert_front(ListType &&L, Range &&r) noexcept {
   return L.insert_after(L.before_begin(), r);
 }
 
-template <csg::singly_linked_list ListType>
-auto insert_front(ListType &L, std::initializer_list<typename ListType::pointer> i) noexcept {
+template <typename ListType>
+    requires csg::singly_linked_list<std::remove_reference_t<ListType>>
+auto insert_front(ListType &&L,
+                  std::initializer_list<
+                      typename std::remove_reference_t<ListType>::pointer
+                  > i) noexcept {
   return L.insert_after(L.before_begin(), i);
 }
 
-template <csg::tailq ListType, typename S>
-auto insert_front(ListType &L, S *s) noexcept {
+template <typename ListType, typename S>
+    requires csg::tailq<std::remove_reference_t<ListType>>
+auto insert_front(ListType &&L, S *s) noexcept {
   return L.insert(L.begin(), s);
 }
 
-template <csg::tailq ListType, std::input_iterator InputIt,
+template <typename ListType, std::input_iterator InputIt,
           std::sentinel_for<InputIt> Sentinel>
-auto insert_front(ListType &L, InputIt begin, Sentinel end) noexcept {
+    requires csg::tailq<std::remove_reference_t<ListType>>
+auto insert_front(ListType &&L, InputIt begin, Sentinel end) noexcept {
   return L.insert(L.begin(), begin, end);
 }
 
-template <csg::tailq ListType, std::ranges::input_range Range>
-auto insert_front(ListType &L, Range r) noexcept {
+template <typename ListType, std::ranges::input_range Range>
+    requires csg::tailq<std::remove_reference_t<ListType>>
+auto insert_front(ListType &&L, Range &&r) noexcept {
   return L.insert(L.begin(), r);
 }
 
-template <csg::tailq ListType>
-auto insert_front(ListType &L, std::initializer_list<typename ListType::pointer> i) noexcept {
+template <typename ListType>
+    requires csg::tailq<std::remove_reference_t<ListType>>
+auto insert_front(ListType &&L,
+                  std::initializer_list<
+                      typename std::remove_reference_t<ListType>::pointer
+                  > i) noexcept {
   return L.insert(L.begin(), i);
 }
 
-template <csg::singly_linked_list ListType>
-auto insert_after(ListType &L, CSG_TYPENAME ListType::const_iterator i,
-                  CSG_TYPENAME ListType::pointer s) noexcept {
+template <typename ListType>
+    requires csg::singly_linked_list<std::remove_reference_t<ListType>>
+auto insert_after(ListType &&L,
+                  CSG_TYPENAME std::remove_reference_t<ListType>::const_iterator i,
+                  CSG_TYPENAME std::remove_reference_t<ListType>::pointer s) noexcept {
   return L.insert_after(i, s);
 }
 
-template <csg::tailq ListType>
-auto insert_after(ListType &L, CSG_TYPENAME ListType::const_iterator i,
-                  CSG_TYPENAME ListType::pointer s) noexcept {
+template <typename ListType>
+    requires csg::tailq<std::remove_reference_t<ListType>>
+auto insert_after(ListType &&L,
+                  CSG_TYPENAME std::remove_reference_t<ListType>::const_iterator i,
+                  CSG_TYPENAME std::remove_reference_t<ListType>::pointer s) noexcept {
   return L.insert(std::next(i), s);
 }
 
-template <csg::singly_linked_list ListType>
-auto erase_front(ListType &L) noexcept { return L.erase_after(L.before_begin()); }
+template <typename ListType>
+    requires csg::singly_linked_list<std::remove_reference_t<ListType>>
+auto erase_front(ListType &&L) noexcept {
+  return L.erase_after(L.before_begin());
+}
 
-template <csg::tailq ListType>
-auto erase_front(ListType &L) noexcept { return L.erase(L.begin()); }
+template <typename ListType>
+    requires csg::tailq<std::remove_reference_t<ListType>>
+auto erase_front(ListType &&L) noexcept {
+  return L.erase(L.begin());
+}
 
-template <csg::singly_linked_list ListType>
-auto erase_after(ListType &L, CSG_TYPENAME ListType::const_iterator begin,
-                 CSG_TYPENAME ListType::const_iterator end) noexcept {
+template <typename ListType>
+    requires csg::singly_linked_list<std::remove_reference_t<ListType>>
+auto erase_after(ListType &&L,
+                 CSG_TYPENAME std::remove_reference_t<ListType>::const_iterator begin,
+                 CSG_TYPENAME std::remove_reference_t<ListType>::const_iterator end) noexcept {
   return L.erase_after(begin, end);
 }
 
-template <csg::tailq ListType>
-auto erase_after(ListType &L, CSG_TYPENAME ListType::const_iterator begin,
-                 CSG_TYPENAME ListType::const_iterator end) noexcept {
+template <typename ListType>
+    requires csg::tailq<std::remove_reference_t<ListType>>
+auto erase_after(ListType &&L,
+                 CSG_TYPENAME std::remove_reference_t<ListType>::const_iterator begin,
+                 CSG_TYPENAME std::remove_reference_t<ListType>::const_iterator end) noexcept {
   return L.erase(++begin, end);
 }
 
-template <csg::singly_linked_list ListType>
-auto erase_item(ListType &L, CSG_TYPENAME ListType::const_iterator pos) {
+template <typename ListType>
+    requires csg::singly_linked_list<std::remove_reference_t<ListType>>
+auto erase_item(ListType &&L,
+                CSG_TYPENAME std::remove_reference_t<ListType>::const_iterator pos) {
   return L.find_erase(pos);
 }
 
-template <csg::tailq ListType>
-auto erase_item(ListType &L, CSG_TYPENAME ListType::const_iterator pos) {
+template <typename ListType>
+    requires csg::tailq<std::remove_reference_t<ListType>>
+auto erase_item(ListType &&L,
+                CSG_TYPENAME std::remove_reference_t<ListType>::const_iterator pos) {
   return L.erase(pos);
 }
 
@@ -339,12 +369,15 @@ generateRandomInput(OutputIt o, std::size_t size, std::int64_t min,
 // using the new operator, buffer their addresses up in a vector, and call
 // insert_front on the vector's values, thereby populating the list.
 template <typename ListType, typename ForwardIt>
-void populateListFromSequence(ListType &list, ForwardIt begin,
+void populateListFromSequence(ListType &&list, ForwardIt begin,
                               ForwardIt end) noexcept {
-  std::vector<typename ListType::pointer> items;
+  using value_type = CSG_TYPENAME std::remove_reference_t<ListType>::value_type;
+  using pointer = CSG_TYPENAME std::remove_reference_t<ListType>::pointer;
+
+  std::vector<pointer> items;
 
   while (begin != end) {
-    typename ListType::pointer const p = new typename ListType::value_type{*begin++};
+    pointer const p = new value_type{*begin++};
     items.push_back(p);
   }
 
@@ -353,22 +386,23 @@ void populateListFromSequence(ListType &list, ForwardIt begin,
 
 template <typename ListType>
 std::random_device::result_type
-populateRandomList(ListType &list, std::size_t size, std::int64_t min,
+populateRandomList(ListType &&list, std::size_t size, std::int64_t min,
                    std::int64_t max) noexcept {
+  using value_type = CSG_TYPENAME std::remove_reference_t<ListType>::value_type;
   std::random_device trueRandom;
   const auto seed = trueRandom();
   std::default_random_engine engine{seed};
   std::uniform_int_distribution random_dist{min, max};
 
   for (std::size_t i = 0; i < size; ++i)
-    list.push_front(new typename ListType::value_type{random_dist(engine)});
+    list.push_front(new value_type{random_dist(engine)});
 
   return seed;
 }
 
 template <typename ListType>
 std::random_device::result_type
-populateSortedList(ListType &list, std::size_t size, std::int64_t min,
+populateSortedList(ListType &&list, std::size_t size, std::int64_t min,
                    std::int64_t max) noexcept {
   std::unique_ptr<std::int64_t []> values{ new std::int64_t[size] };
   const auto seed = generateRandomInput(values.get(), size, min, max);
@@ -379,7 +413,7 @@ populateSortedList(ListType &list, std::size_t size, std::int64_t min,
 }
 
 template <typename ListType>
-void destroyList(ListType &list) noexcept {
+void destroyList(ListType &&list) noexcept {
   csg::for_each_safe(list, [](auto &v) { delete std::addressof(v); });
 }
 

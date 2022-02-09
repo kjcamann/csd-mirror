@@ -23,6 +23,7 @@ using sl_head_invoke_t = slist_head_cinvoke_t<&A::next>;
 using sl_head_stateful_t = slist_head<S, S::extractor_type>;
 
 using sl_fwd_head_t = slist_fwd_head<D>;
+using sl_fwd_head_inline_t = slist_fwd_head<D, std::size_t>;
 using sl_proxy_t = CSG_SLIST_PROXY_OFFSET_T(D, next);
 using sl_proxy_inline_t = CSG_SLIST_PROXY_OFFSET_T(D, next, std::size_t);
 using sl_proxy_stateful_t = slist_proxy<slist_fwd_head<S>, S::extractor_type>;
@@ -148,9 +149,10 @@ TEMPLATE_TEST_CASE("slist.find_predecessor",
   find_predecessor_tests<TestType>();
 }
 
-// FIXME: more test cases?
 TEST_CASE("slist.proxy", "[slist]") {
-  proxy_tests<sl_fwd_head_t, sl_proxy_t>();
+  proxy_tests<sl_proxy_t>();
+  proxy_tests<sl_proxy_inline_t>();
+  proxy_tests<sl_proxy_stateful_t>();
 }
 
 TEMPLATE_TEST_CASE("slist.merge", "[slist][merge][template]",

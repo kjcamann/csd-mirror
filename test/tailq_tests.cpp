@@ -168,9 +168,10 @@ TEST_CASE("tailq.swap", "[tailq]") {
   SECTION("stateful") { swap_tests<tq_head_stateful_t, tq_test_proxy_stateful_t>(); }
 }
 
-// FIXME: more test cases?
 TEST_CASE("tailq.proxy", "[tailq]") {
-  proxy_tests<tq_fwd_head_t, tq_proxy_t>();
+  proxy_tests<tq_proxy_t>();
+  proxy_tests<tq_proxy_inline_t>();
+  proxy_tests<tq_proxy_stateful_t>();
 }
 
 TEMPLATE_TEST_CASE("tailq.merge", "[tailq][merge][template]",

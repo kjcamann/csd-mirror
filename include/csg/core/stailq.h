@@ -278,7 +278,7 @@ public:
 
   template <std::ranges::input_range Range>
       requires std::constructible_from<pointer, std::ranges::range_reference_t<Range>>
-  constexpr iterator insert_after(const_iterator_t pos, Range &r)
+  constexpr iterator insert_after(const_iterator_t pos, Range &&r)
       noexcept( noexcept(insert_after(pos, std::ranges::begin(r),
                                       std::ranges::end(r))) ) {
     return insert_after(pos, std::ranges::begin(r), std::ranges::end(r));
@@ -1499,5 +1499,25 @@ stailq_base<T, E, S, D>::insert_range_after(const_iterator pos, QueueIt first,
 }
 
 } // End of namespace csg
+
+template <typename T, csg::stailq_entry_extractor<T> EntryEx,
+          csg::optional_size SizeMember>
+inline constexpr bool std::ranges::enable_borrowed_range<
+    csg::stailq_head<T, EntryEx, SizeMember>> = true;
+
+template <typename T, csg::stailq_entry_extractor<T> EntryEx,
+          csg::optional_size SizeMember>
+inline constexpr bool std::ranges::enable_view<
+    csg::stailq_head<T, EntryEx, SizeMember>> = true;
+
+template <csg::util::derived_from_template<csg::stailq_fwd_head> FwdHead,
+          csg::stailq_entry_extractor<typename FwdHead::value_type> EntryEx>
+inline constexpr bool std::ranges::enable_borrowed_range<
+    csg::stailq_proxy<FwdHead, EntryEx>> = true;
+
+template <csg::util::derived_from_template<csg::stailq_fwd_head> FwdHead,
+          csg::stailq_entry_extractor<typename FwdHead::value_type> EntryEx>
+inline constexpr bool std::ranges::enable_view<
+    csg::stailq_proxy<FwdHead, EntryEx>> = true;
 
 #endif

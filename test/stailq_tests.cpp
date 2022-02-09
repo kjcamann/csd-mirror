@@ -139,9 +139,10 @@ TEMPLATE_TEST_CASE("stailq.find_predecessor",
   find_predecessor_tests<TestType>();
 }
 
-// FIXME: more test cases?
 TEST_CASE("stailq.proxy", "[stailq]") {
-  proxy_tests<stq_fwd_head_t, stq_proxy_t>();
+  proxy_tests<stq_proxy_t>();
+  proxy_tests<stq_proxy_inline_t>();
+  proxy_tests<stq_proxy_stateful_t>();
 }
 
 TEMPLATE_TEST_CASE("stailq.merge", "[stailq][merge][template]",

@@ -896,7 +896,7 @@ public:
   template <std::ranges::input_range Range,
             util::can_direct_initialize<entry_extractor_type> U>
       requires std::constructible_from<pointer, std::ranges::range_reference_t<Range>>
-  constexpr slist_head(Range &r, U &&u)
+  constexpr slist_head(Range &&r, U &&u)
       noexcept(std::is_nothrow_constructible_v<entry_extractor_type, U> &&
                noexcept(base_type::assign(r)))
       : m_entryExtractor{std::forward<U>(u)} {
@@ -1429,5 +1429,25 @@ slist_base<T, E, S, D>::insert_range_after(const_iterator pos, QueueIt first,
 }
 
 } // End of namespace csg
+
+template <typename T, csg::slist_entry_extractor<T> EntryEx,
+          csg::optional_size SizeMember>
+inline constexpr bool std::ranges::enable_borrowed_range<
+    csg::slist_head<T, EntryEx, SizeMember>> = true;
+
+template <typename T, csg::slist_entry_extractor<T> EntryEx,
+          csg::optional_size SizeMember>
+inline constexpr bool std::ranges::enable_view<
+    csg::slist_head<T, EntryEx, SizeMember>> = true;
+
+template <csg::util::derived_from_template<csg::slist_fwd_head> FwdHead,
+          csg::slist_entry_extractor<typename FwdHead::value_type> EntryEx>
+inline constexpr bool std::ranges::enable_borrowed_range<
+    csg::slist_proxy<FwdHead, EntryEx>> = true;
+
+template <csg::util::derived_from_template<csg::slist_fwd_head> FwdHead,
+          csg::slist_entry_extractor<typename FwdHead::value_type> EntryEx>
+inline constexpr bool std::ranges::enable_view<
+    csg::slist_proxy<FwdHead, EntryEx>> = true;
 
 #endif

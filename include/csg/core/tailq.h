@@ -1400,4 +1400,24 @@ constexpr void tailq_base<T, E, S, D>::remove_range(const_iterator first,
 
 } // End of namespace csg
 
+template <typename T, csg::tailq_entry_extractor<T> EntryEx,
+          csg::optional_size SizeMember>
+inline constexpr bool std::ranges::enable_borrowed_range<
+    csg::tailq_head<T, EntryEx, SizeMember>> = true;
+
+template <typename T, csg::tailq_entry_extractor<T> EntryEx,
+          csg::optional_size SizeMember>
+inline constexpr bool std::ranges::enable_view<
+    csg::tailq_head<T, EntryEx, SizeMember>> = true;
+
+template <csg::util::derived_from_template<csg::tailq_fwd_head> FwdHead,
+          csg::tailq_entry_extractor<typename FwdHead::value_type> EntryEx>
+inline constexpr bool std::ranges::enable_borrowed_range<
+    csg::tailq_proxy<FwdHead, EntryEx>> = true;
+
+template <csg::util::derived_from_template<csg::tailq_fwd_head> FwdHead,
+          csg::tailq_entry_extractor<typename FwdHead::value_type> EntryEx>
+inline constexpr bool std::ranges::enable_view<
+    csg::tailq_proxy<FwdHead, EntryEx>> = true;
+
 #endif
